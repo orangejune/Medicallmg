@@ -11,23 +11,31 @@ class ContourExtraction:
     def __init__(self, full_image, blue_image):
         self.full_image = full_image
         self.blue_image = blue_image
+         
 
-    def extract_boundaries_and_filter_by_mask(self, mask, kernel_size=(5, 5), morph_kernel=(5, 5), min_area=100, smooth=False,  min_threshold=None, max_threshold=None):
+    def extract_boundaries_and_filter_by_mask(self, mask, kernel_size=(5, 5), morph_kernel=(5, 5), min_area=100, smooth=False, min_threshold=None, max_threshold=None):
         """
         Extract contours for the entire image and:
         - Store the valid portion of each contour within the buffer zone.
         - Store the entire contour if at least one point lies within the buffer zone.
+        - Reorder the points using `reorder_contour_points`.
+        - Return multiple segments if gaps exist.
+        - Skip inner contours (contours inside other contours).
 
         Args:
             mask (numpy.ndarray): Binary mask defining the region of interest.
-            morph_kernel (tuple): Kernel size for morphological operations to clean the mask.
+            kernel_size (tuple): Kernel size for image preprocessing.
+            morph_kernel (tuple): Kernel size for morphological operations.
             min_area (int): Minimum area to keep a contour. Smaller areas are ignored.
             smooth (bool): Whether to smooth the contours.
+            min_threshold (int or None): Lower bound for thresholding.
+            max_threshold (int or None): Upper bound for thresholding.
 
         Returns:
-            tuple: Two lists:
-                - valid_parts_contours: Portions of contours within the buffer zone.
-                - full_contours: Entire contours that intersect with the buffer zone.
+            tuple:
+                - valid_parts_contours (list of numpy.ndarray): Reordered valid contours.
+                - full_contours (list of numpy.ndarray): Entire contours that intersect with the buffer zone.
+                - segment_contours (list of lists of numpy.ndarray): List of contour segments for verification.
         """
         # Step 1: Convert full image to grayscale if needed
         if len(self.full_image.shape) == 3:
@@ -35,113 +43,151 @@ class ContourExtraction:
         else:
             gray_image = self.full_image
 
-        # Step 2: Threshold the image to create a binary mask
-        # if min_threshold is not None and max_threshold is not None:
-        #     binary_image = cv2.inRange(gray_image, min_threshold, max_threshold)
-        # else:
-        _, binary_image = cv2.threshold(gray_image, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+        # Step 2: Apply thresholding
+        if min_threshold is not None and max_threshold is not None:
+            binary_image = cv2.inRange(gray_image, min_threshold, max_threshold)
+        else:
+            _, binary_image = cv2.threshold(gray_image, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
 
-        # Step 3: Find contours for the entire image
-        contours, _ = cv2.findContours(binary_image, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
+        # Step 3: Find contours **with hierarchy** (to remove inner contours)
+        contours, hierarchy = cv2.findContours(binary_image, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
 
         # Step 4: Apply morphological operations to clean the mask
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, morph_kernel)
         cleaned_mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
 
-
         # Step 5: Initialize lists for valid portions and full contours
         valid_parts_contours = []
         full_contours = []
+        segment_contours = []
 
-        # Step 6: Process each contour
-        for contour in contours:
-            # Check if any point in the contour lies within the mask
-            mask_points = []
-            for point in contour:
-                px, py = point[0]
-                if cleaned_mask[py, px] > 0:  # Keep only points within the mask
-                    mask_points.append([px, py])
+        # Step 6: Process each contour (keep only outer contours)
+        for i, contour in enumerate(contours):
+            # Skip inner contours (contours inside another contour)
+            if hierarchy[0][i][3] != -1:
+                continue  # This contour is inside another, so we skip it
 
-            # Store the valid portion within the buffer zone
-            if len(mask_points) > 1:  # Ensure the portion has enough points
-                valid_part = np.array(mask_points, dtype=np.int32).reshape(-1, 1, 2)
-                if cv2.contourArea(valid_part) >= min_area:  # Filter by area
-                    valid_parts_contours.append(valid_part)
+            # Reorder the contour and find segments
+            reordered, segments = self.reorder_contour_points(contour, cleaned_mask)
 
-            # Store the entire contour if any point is in the buffer zone
+            # If reordering worked and the area is valid, add it to the valid contours list
+            if reordered is not None and cv2.contourArea(reordered) >= min_area:
+                valid_parts_contours.append(reordered)
+                segment_contours.append(segments)
+
+            # Store the entire contour if any part is in the buffer
             if any(cleaned_mask[py, px] > 0 for px, py in contour[:, 0]) and cv2.contourArea(contour) >= min_area:
                 full_contours.append(contour)
 
-        # Optional: Smooth the contours
+        # Step 7: Optional smoothing
         if smooth:
             valid_parts_contours = [self.smooth_contour(cnt) for cnt in valid_parts_contours]
             full_contours = [self.smooth_contour(cnt) for cnt in full_contours]
 
-        print(f"Extracted {len(valid_parts_contours)} valid parts and {len(full_contours)} full contours.")
-        return valid_parts_contours, full_contours
+        print(f"Extracted {len(valid_parts_contours)} reordered contours and {len(segment_contours)} segmented contours from {len(full_contours)} full outer contours.")
+        return valid_parts_contours, full_contours, segment_contours
 
-    ##todo: reorder points to avoid a line added after filter  -- not  tested ...
+
+
+
     def reorder_contour_points(self, contour, mask):
         """
-        Reorder contour points to maintain natural continuity, avoiding artificial lines, and ensuring a single polyline.
+        Reorder contour points to maintain natural continuity, avoiding artificial lines.
+        Supports multiple gaps and returns both a single reordered polyline and separate segments.
 
         Args:
             contour (numpy.ndarray): Original contour points (Nx1x2).
             mask (numpy.ndarray): Binary mask defining the buffer zone.
 
         Returns:
-            numpy.ndarray: A single reordered contour.
+            tuple:
+                - reordered_contour (numpy.ndarray): A single reordered contour following continuity.
+                - contour_segments (list of numpy.ndarray): Separate contour segments split at gaps.
         """
-        # Step 1: Identify valid segments
-        valid_points = []
-        current_segment = []
+        # Step 1: Create a dictionary to track point indices and coordinates
+        point_dict = {i: tuple(contour[i][0]) for i in range(len(contour))}
 
-        for i, point in enumerate(contour):
-            px, py = point[0]
-            if mask[py, px] > 0:  # Point is within the mask
-                current_segment.append([px, py])
-            else:
-                if current_segment:
-                    valid_points.append(current_segment)
-                    current_segment = []
+        # Step 2: Identify valid points within the mask
+        valid_points = {i: point_dict[i] for i in point_dict if mask[point_dict[i][1], point_dict[i][0]] > 0}
+        valid_indices = sorted(valid_points.keys())
 
-        # Add the last segment if it exists
-        if current_segment:
-            valid_points.append(current_segment)
+        if not valid_indices:
+            return None, []  # No valid points remain
 
-        # Step 2: Reorder points to form a single polyline --todo: this part is not quite right
-        if len(valid_points) > 1:
-            # Combine the last segment and the first segment for continuity
-            reordered_points = valid_points[-1] + valid_points[0]
-            # Add the middle segments (if any)
-            for segment in valid_points[1:-1]:
-                reordered_points.extend(segment)
+        # Step 3: Detect all gaps in valid indices
+        gap_indices = []
+        for i in range(1, len(valid_indices)):
+            if valid_indices[i] - valid_indices[i - 1] > 1:  # Found a gap
+                gap_indices.append(i)
+
+        # Step 4: Split valid points into segments
+        contour_segments = []
+        start_idx = 0
+        for gap_idx in gap_indices:
+            segment_indices = valid_indices[start_idx:gap_idx]
+            segment = [valid_points[i] for i in segment_indices]
+            if len(segment) > 1:
+                contour_segments.append(np.array(segment, dtype=np.int32).reshape(-1, 1, 2))
+            start_idx = gap_idx
+
+        # Add the final segment
+        segment_indices = valid_indices[start_idx:]
+        segment = [valid_points[i] for i in segment_indices]
+        if len(segment) > 1:
+            contour_segments.append(np.array(segment, dtype=np.int32).reshape(-1, 1, 2))
+
+        # Step 5: Reorder points by choosing the segment after the largest gap as the new starting point
+        if len(contour_segments) > 1:
+            reordered_contour = np.vstack(contour_segments[::-1])  # Reverse segment order for natural flow
         else:
-            # If only one segment exists, no reordering is needed
-            reordered_points = valid_points[0]
+            reordered_contour = contour_segments[0] if contour_segments else None
 
-        # Step 3: Return the reordered points as a single contour
-        return np.array(reordered_points, dtype=np.int32).reshape(-1, 1, 2)
+        return reordered_contour, contour_segments
 
-    def VizContours(self, contours, annotated_image):
-        # Visualize and annotate contours with labels and directions
-        for i, line in enumerate(contours):
-            # Draw the contour as a polyline
-            cv2.polylines(annotated_image, [line], isClosed=False, color=(255, 255, 0), thickness=1)
 
-            # Label the contour with its index
-            if len(line) > 0:
-                # Use the first point of the contour for the label
-                label_position = tuple(line[0][0])
-                cv2.putText(annotated_image, f"#{i}", label_position, cv2.FONT_HERSHEY_SIMPLEX,
-                            fontScale=0.25, color=(0, 255, 0), thickness=1)
+    def visualize_contours(self, full_contours, valid_parts_contours, segment_contours, valid_parts=None):
+        """
+        Visualize contours using OpenCV (cv2.imshow) instead of Matplotlib.
 
-                # Draw arrows to indicate the direction
-                for j in range(0, len(line) - 1, max(1, len(line) // 20)):  # Add arrows at regular intervals
-                    start_point = tuple(line[j][0])
-                    end_point = tuple(line[j + 1][0])
-                    cv2.arrowedLine(annotated_image, start_point, end_point, color=(0, 0, 255), thickness=1,
-                                    tipLength=0.3)
+        Args:
+            full_contours (list of numpy.ndarray): Full contours intersecting the buffer zone.
+            valid_parts_contours (list of numpy.ndarray): Reordered valid contours.
+            segment_contours (list of lists of numpy.ndarray): List of segmented contours.
+            valid_parts (list of numpy.ndarray or None): Additional valid parts to visualize (default: None).
+
+        Returns:
+            None: Displays the image with contours using OpenCV.
+        """
+        # Ensure full_image is in BGR format for visualization
+        if len(self.full_image.shape) == 2:
+            annotated_image = cv2.cvtColor(self.full_image, cv2.COLOR_GRAY2BGR)
+        else:
+            annotated_image = self.full_image.copy()
+        print()
+
+        # Draw full contours in Yellow
+        for line in full_contours:
+            cv2.polylines(annotated_image, [line], isClosed=False, color=(255, 255, 0), thickness=4)
+
+        # Draw reordered contours in Green
+        for line in valid_parts_contours:
+            cv2.polylines(annotated_image, [line], isClosed=False, color=(0, 255, 0), thickness=2)
+
+        # Draw segmented contours in Red
+        # for segments in segment_contours:
+        #     for line in segments:
+        #         cv2.polylines(annotated_image, [line], isClosed=False, color=(0, 0, 255), thickness=2)
+
+        # Draw valid parts in Cyan (if provided)
+        if valid_parts is not None:
+            for line in valid_parts:
+                cv2.polylines(annotated_image, [line], isClosed=False, color=(255, 0, 255), thickness=2)  # Cyan
+
+        # Display the image using OpenCV
+        cv2.imshow("Contours Visualization", annotated_image)
+        cv2.waitKey(0)  # Wait indefinitely until a key is pressed
+        cv2.destroyAllWindows()  # Close the window after key press
+
 
 
     ##todo:Not tested  a function to perform extraction per region (w,d determine the number of zones try to divide images vertically)

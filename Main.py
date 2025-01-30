@@ -19,8 +19,8 @@ blue_image_path = r"KD/New/冠脉瘤1-wangziyi/KD-CAL-wangziyi/2-LCA LAD描记.d
 hsv_ranges = {
     "red": [(np.array([0, 100, 100]), np.array([10, 255, 255])),
             (np.array([160, 100, 100]), np.array([179, 255, 255]))],
-    "green": [(np.array([40, 100, 100]), np.array([70, 255, 255]))],
-    "blue": [(np.array([100, 100, 100]), np.array([130, 255, 255]))],
+    # "green": [(np.array([40, 100, 100]), np.array([70, 255, 255]))],
+    # "blue": [(np.array([100, 100, 100]), np.array([130, 255, 255]))],
     "yellow": [(np.array([20, 100, 100]), np.array([30, 255, 255]))] ##todo: better not use yellow
 }
 target_bbox = (160, 70, 910, 500)  # Bounding box (left, top, right, bottom)
@@ -59,25 +59,12 @@ for color, ranges in hsv_ranges.items():
     for i_pixel_min in [90,]: ##todo: not using the threshold for extraction seems OTUS works the best
         for i_pixel_max in [200]:
             for i_kernel in [3,]:
-                for i_area in [50,]: ##todo: helpful to elimate small regions like image rulers
-                    open_contours, contours =  ce.extract_boundaries_and_filter_by_mask(buffered_mask, morph_kernel=(i_kernel, i_kernel),
+                for i_area in [100,]: ##todo: helpful to elimate small regions like image rulers
+                    valid_parts_contours, full_contours, segment_contours =  ce.extract_boundaries_and_filter_by_mask(buffered_mask, morph_kernel=(i_kernel, i_kernel),
                                                                                         min_area=i_area, min_threshold=i_pixel_min, max_threshold=i_pixel_max)
-                    # Visualize the open contours
-                    annotated_image = ce.full_image.copy()
-                    ce.VizContours(contours, buffered_mask)
-                    # for line in contours:
-                    #     cv2.polylines(annotated_image, [line], isClosed=False, color=(255, 255, 0),
-                    #                   thickness=1)  # Open polylines in green
-                    for line in open_contours:
-                        cv2.polylines(annotated_image, [line], isClosed=False, color=(0, 255, 0),
-                                      thickness=2)  # Open polylines in green
+                    ce.visualize_contours(full_contours,valid_parts_contours, segment_contours)
 
-                    cv2.imshow("Open Contours Clipped to Buffer Zone", annotated_image)
-                    cv2.imwrite(f"KD/{color}_open_contours_clipped_to_buffer_zone_{i_pixel_min}_{i_pixel_max}_{i_kernel}_{i_area}.png", annotated_image)
-                    cv2.waitKey(0)
-                    cv2.destroyAllWindows()
-
-                    restricted_contours = open_contours
+                    restricted_contours = valid_parts_contours
                     ##todo: create a distance computation object
                     distance_check = DistanceChecker(restricted_contours, readimg.full_image)
                     distances, nearest_points, max_diameter, max_points, sampled_contour1, sampled_contour2 = distance_check.debug_distances(
