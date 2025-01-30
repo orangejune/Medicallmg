@@ -191,52 +191,98 @@ class ContourExtraction:
 
 
     ##todo:Not tested  a function to perform extraction per region (w,d determine the number of zones try to divide images vertically)
-    def extract_contours_by_zones(self, mask, n_zones, thresholds=None, min_area=100):
+    def extract_contours_by_arbitrary_regions(self, mask, n_vertical=1, n_horizontal=1, thresholds=None, kernel_size=(5, 5), morph_kernel=(5, 5), min_area=100, smooth=False):
         """
-        Divide the image vertically into zones, apply contour extraction for each zone with adaptive or specified thresholds, and merge results.
+        Extract contours separately for multiple arbitrary regions, applying different thresholds per region.
 
         Args:
             mask (numpy.ndarray): Binary mask defining the region of interest.
-            n_zones (int): Number of vertical zones to divide the image into.
-            thresholds (list of tuple or None): List of (min_threshold, max_threshold) for each zone. If None, Otsu's method is applied.
-            min_area (int): Minimum area to keep a contour.
+            n_vertical (int): Number of vertical regions to divide the image into.
+            n_horizontal (int): Number of horizontal regions to divide the image into.
+            thresholds (list of list of tuple or None): 2D list where each entry corresponds to a region's (min_threshold, max_threshold). 
+                If None, Otsu’s method is applied per region.
+            kernel_size (tuple): Kernel size for image preprocessing.
+            morph_kernel (tuple): Kernel size for morphological operations.
+            min_area (int): Minimum area to keep a contour. Smaller areas are ignored.
+            smooth (bool): Whether to smooth the contours.
 
         Returns:
-            list: Merged contours from all zones.
+            tuple:
+                - valid_parts_contours (list of numpy.ndarray): Reordered valid contours.
+                - full_contours (list of numpy.ndarray): Entire contours that intersect with the buffer zone.
+                - segment_contours (list of lists of numpy.ndarray): List of contour segments for verification.
         """
         height, width = self.full_image.shape[:2]
-        zone_width = width // n_zones
-        merged_contours = []
+        region_width = width // n_vertical
+        region_height = height // n_horizontal
 
-        for i in range(n_zones):
-            # Define the vertical range for the current zone
-            x_start = i * zone_width
-            x_end = (i + 1) * zone_width if i < n_zones - 1 else width
+        # Check if thresholds are provided, otherwise use Otsu's method
+        if thresholds is None:
+            thresholds = [[None for _ in range(n_vertical)] for _ in range(n_horizontal)]  # Placeholder for Otsu
 
-            # Extract the zone from the full image and mask
-            zone_image = self.full_image[:, x_start:x_end]
-            zone_mask = mask[:, x_start:x_end]
+        if len(thresholds) != n_horizontal or any(len(row) != n_vertical for row in thresholds):
+            raise ValueError("Thresholds must match the number of defined regions (n_horizontal x n_vertical).")
 
-            # Apply thresholding
-            if thresholds is not None:
-                # Use provided thresholds for the current zone
-                min_threshold, max_threshold = thresholds[i]
-                binary_image = cv2.inRange(zone_image, min_threshold, max_threshold)
-            else:
-                # Use Otsu's method for adaptive thresholding
-                _, binary_image = cv2.threshold(zone_image, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+        valid_parts_contours = []
+        full_contours = []
+        segment_contours = []
 
-            # Find contours in the current zone
-            contours, _ = cv2.findContours(binary_image, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
+        for i in range(n_horizontal):
+            for j in range(n_vertical):
+                # Define region coordinates
+                x_start, x_end = j * region_width, (j + 1) * region_width if j < n_vertical - 1 else width
+                y_start, y_end = i * region_height, (i + 1) * region_height if i < n_horizontal - 1 else height
 
-            # Filter contours based on area and adjust coordinates
-            for contour in contours:
-                if cv2.contourArea(contour) >= min_area:
-                    contour[:, 0, 0] += x_start  # Adjust x-coordinates to global scale
-                    merged_contours.append(contour)
+                region_image = self.full_image[y_start:y_end, x_start:x_end]
+                region_mask = mask[y_start:y_end, x_start:x_end]
 
-        print(f"Extracted {len(merged_contours)} contours from {n_zones} zones.")
-        return merged_contours
+                # Apply thresholding (use Otsu's method if None provided)
+                if thresholds[i][j] is None:
+                    _, binary_image = cv2.threshold(region_image, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+                else:
+                    min_threshold, max_threshold = thresholds[i][j]
+                    binary_image = cv2.inRange(region_image, min_threshold, max_threshold)
+
+                # Find contours and hierarchy
+                contours, hierarchy = cv2.findContours(binary_image, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
+
+                # Apply morphological operations
+                kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, morph_kernel)
+                cleaned_mask = cv2.morphologyEx(region_mask, cv2.MORPH_CLOSE, kernel)
+
+                for k, contour in enumerate(contours):
+                    # Skip inner contours
+                    if hierarchy[0][k][3] != -1:
+                        continue
+
+                    # Reorder the contour and find segments
+                    reordered, segments = self.reorder_contour_points(contour, cleaned_mask)
+
+                    # Adjust coordinates to the full image scale
+                    if reordered is not None:
+                        reordered[:, 0, 0] += x_start
+                        reordered[:, 0, 1] += y_start
+                    for segment in segments:
+                        segment[:, 0, 0] += x_start
+                        segment[:, 0, 1] += y_start
+
+                    # Store reordered and segmented contours
+                    if reordered is not None and cv2.contourArea(reordered) >= min_area:
+                        valid_parts_contours.append(reordered)
+                        segment_contours.append(segments)
+
+                    # Store full contour if it intersects the buffer
+                    if any(cleaned_mask[py, px] > 0 for px, py in contour[:, 0]) and cv2.contourArea(contour) >= min_area:
+                        full_contours.append(contour)
+
+        # Optional smoothing
+        if smooth:
+            valid_parts_contours = [self.smooth_contour(cnt) for cnt in valid_parts_contours]
+            full_contours = [self.smooth_contour(cnt) for cnt in full_contours]
+
+        print(f"Extracted {len(valid_parts_contours)} valid parts, {len(full_contours)} full contours, and {len(segment_contours)} segmented contours from {n_horizontal}x{n_vertical} regions.")
+        return valid_parts_contours, full_contours, segment_contours
+
 
 
 
