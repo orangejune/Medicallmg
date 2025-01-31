@@ -188,6 +188,76 @@ class ContourExtraction:
         cv2.waitKey(0)  # Wait indefinitely until a key is pressed
         cv2.destroyAllWindows()  # Close the window after key press
 
+    def visualize_contours_on_image(self, full_image, full_contours, valid_parts_contours, segment_contours,
+                                    midline=None, used_lines=None, max_line=None,
+                                    save_path="contour_visualization.png"):
+        """
+        Visualizes contours, midline, and perpendicular lines overlaid on the original image.
+        - Saves the visualization as an image file.
+        - Displays the image using OpenCV.
+
+        Args:
+            full_image (numpy.ndarray): Original grayscale image.
+            full_contours (list of numpy.ndarray): Full contours (yellow).
+            valid_parts_contours (list of numpy.ndarray): Reordered valid contours (green).
+            segment_contours (list of lists of numpy.ndarray): Segmented contours (red).
+            midline (np.ndarray, optional): Midline points (blue dashed line).
+            used_lines (list of tuple, optional): Perpendicular lines used for distance computation (gray).
+            max_line (tuple, optional): The longest perpendicular line (highlighted in yellow).
+            save_path (str, optional): Path to save the output image.
+
+        Returns:
+            None: Saves and displays the image.
+        """
+        # Convert grayscale image to BGR for visualization
+        if len(full_image.shape) == 2:
+            annotated_image = cv2.cvtColor(full_image, cv2.COLOR_GRAY2BGR)
+        else:
+            annotated_image = full_image.copy()
+
+        # Draw full contours in Yellow
+        for line in full_contours:
+            cv2.polylines(annotated_image, [line], isClosed=False, color=(255, 255, 0), thickness=1)
+
+        # Draw reordered valid contours in Green
+        for line in valid_parts_contours:
+            cv2.polylines(annotated_image, [line], isClosed=False, color=(0, 255, 0), thickness=2)
+
+        # # Draw segmented contours in Red
+        # for segments in segment_contours:
+        #     for line in segments:
+        #         cv2.polylines(annotated_image, [line], isClosed=False, color=(0, 0, 255), thickness=2)
+
+        # Draw midline in Blue (dashed)
+        if midline is not None:
+            for i in range(len(midline) - 1):
+                pt1 = tuple(map(int, midline[i]))
+                pt2 = tuple(map(int, midline[i + 1]))
+                cv2.line(annotated_image, pt1, pt2, (255, 0, 0), 1, cv2.LINE_AA)
+
+        # Draw perpendicular lines in Gray
+        if used_lines is not None:
+            for line in used_lines:
+                pt1 = tuple(map(int, line[0]))
+                pt2 = tuple(map(int, line[1]))
+                cv2.line(annotated_image, pt1, pt2, (150, 150, 150), 1)
+
+        # Highlight the longest perpendicular line in Yellow
+        if max_line is not None:
+            pt1 = tuple(map(int, max_line[0]))
+            pt2 = tuple(map(int, max_line[1]))
+            cv2.line(annotated_image, pt1, pt2, (0, 255, 255), 3)
+
+        # Save the annotated image
+        cv2.imwrite(save_path, annotated_image)
+        print(f"Visualization saved as: {save_path}")
+
+        # Display the image
+        cv2.imshow("Contours and Distance Visualization", annotated_image)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+
+
 
 
     ##todo:Not tested  a function to perform extraction per region (w,d determine the number of zones try to divide images vertically)

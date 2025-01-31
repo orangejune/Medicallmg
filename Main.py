@@ -5,6 +5,8 @@ from Analysis_MaskColor import *
 
 from Analysis_Distance import *
 
+from Analysis_WallDistance import *
+
 full_image_path = r"KD/New/KD-3-dengjinyi/KD-3-dengjinyi/Series-001/jpg-img-00001-00003.jpg"  # Replace with your grayscale image path
 blue_image_path = r"KD/New/KD-3-dengjinyi/KD-3-dengjinyi/Series-001/jpg-img-00001-00004.jpg"  # Replace with your image with blue lines
 
@@ -60,20 +62,36 @@ for color, ranges in hsv_ranges.items():
         for i_pixel_max in [200]:
             for i_kernel in [3,]:
                 for i_area in [100,]: ##todo: helpful to elimate small regions like image rulers
-                    valid_parts_contours, full_contours, segment_contours =  ce.extract_boundaries_and_filter_by_mask(buffered_mask, morph_kernel=(i_kernel, i_kernel),
-                                                                                        min_area=i_area, min_threshold=i_pixel_min, max_threshold=i_pixel_max)
-                    ce.visualize_contours(full_contours,valid_parts_contours, segment_contours)
+                    for i_n_pt in [100,200]:
+                        for i_nstep in [5, 10]:
+                            valid_parts_contours, full_contours, segment_contours =  ce.extract_boundaries_and_filter_by_mask(buffered_mask, morph_kernel=(i_kernel, i_kernel),
+                                                                                                min_area=i_area, min_threshold=i_pixel_min, max_threshold=i_pixel_max)
+                            ce.visualize_contours(full_contours,valid_parts_contours, segment_contours)
 
-                    restricted_contours = valid_parts_contours
-                    ##todo: create a distance computation object
-                    distance_check = DistanceChecker(restricted_contours, readimg.full_image)
-                    distances, nearest_points, max_diameter, max_points, sampled_contour1, sampled_contour2 = distance_check.debug_distances(
-                        num_points=1000)
+                            restricted_contours = valid_parts_contours
 
-                    # Step 4: Visualize and save results
-                    distance_check.visualize_debug_distances(sampled_contour1, sampled_contour2, distances,
-                                                             nearest_points, max_diameter, max_points,
-                                                             save_path=f"KD/{color}_distance_{i_pixel_min}_{i_pixel_max}_{i_kernel}_{i_area}_visualization.png")
+
+                            #     # Initialize the midline extractor
+                            md_extractor = MidlineExtractor(n_points=100, smoothing=True)
+                            # Compute the midline and distances
+                            midline, distances, max_distance, used_lines, max_line = md_extractor.compute_distances(
+                                valid_parts_contours, step=10, visualize=False)
+
+                            ce.visualize_contours_on_image(readimg.full_image, full_contours, valid_parts_contours,
+                                                           segment_contours, midline, used_lines, max_line ,
+                                                           save_path="KD/"+f"{color.capitalize()}"
+                                                                           f"_Mask_pixel_{i_pixel_min}_{i_pixel_max}_area_{i_area}_sample_{i_n_pt}_dstep_{i_nstep}"
+                                                                                                                       +"output_contours.png")
+
+                    # ##todo: create a distance computation object
+                    # distance_check = DistanceChecker(restricted_contours, readimg.full_image)
+                    # distances, nearest_points, max_diameter, max_points, sampled_contour1, sampled_contour2 = distance_check.debug_distances(
+                    #     num_points=1000)
+
+                    # # Step 4: Visualize and save results
+                    # distance_check.visualize_debug_distances(sampled_contour1, sampled_contour2, distances,
+                    #                                          nearest_points, max_diameter, max_points,
+                    #                                          save_path=f"KD/{color}_distance_{i_pixel_min}_{i_pixel_max}_{i_kernel}_{i_area}_visualization.png")
 
 ##todo: check random connection-- topology; check regional range; can support multiple colors but different output images --need to combine
 
