@@ -11,7 +11,7 @@ class ContourExtraction:
     def __init__(self, full_image, blue_image):
         self.full_image = full_image
         self.blue_image = blue_image
-         
+
 
     def extract_boundaries_and_filter_by_mask(self, mask, kernel_size=(5, 5), morph_kernel=(5, 5), min_area=100, smooth=False, min_threshold=None, max_threshold=None):
         """
@@ -48,6 +48,7 @@ class ContourExtraction:
             binary_image = cv2.inRange(gray_image, min_threshold, max_threshold)
         else:
             _, binary_image = cv2.threshold(gray_image, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+        # binary_image = cv2.GaussianBlur(binary_image, (5, 5), 0) todo: not very helpful
 
         # Step 3: Find contours **with hierarchy** (to remove inner contours)
         contours, hierarchy = cv2.findContours(binary_image, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
@@ -55,6 +56,9 @@ class ContourExtraction:
         # Step 4: Apply morphological operations to clean the mask
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, morph_kernel)
         cleaned_mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+
+        # contours = [cv2.approxPolyDP(cnt, epsilon=0.005 * cv2.arcLength(cnt, True), closed=True) for cnt in
+        #                      contours] ##todo: too bunky
 
         # Step 5: Initialize lists for valid portions and full contours
         valid_parts_contours = []
@@ -83,17 +87,17 @@ class ContourExtraction:
         if smooth:
             valid_parts_contours = [self.smooth_contour(cnt) for cnt in valid_parts_contours]
             full_contours = [self.smooth_contour(cnt) for cnt in full_contours]
-
+        # print(valid_parts_contours[0][:,0,:])
         print(f"Extracted {len(valid_parts_contours)} reordered contours and {len(segment_contours)} segmented contours from {len(full_contours)} full outer contours.")
         return valid_parts_contours, full_contours, segment_contours
 
-
-
-
     def reorder_contour_points(self, contour, mask):
         """
-        Reorder contour points to maintain natural continuity, avoiding artificial lines.
-        Supports multiple gaps and returns both a single reordered polyline and separate segments.
+        Reorders contour points to maintain natural continuity and avoid artificial connections.
+        - Removes single-point segments.
+        - Uses nearest-neighbor connection to ensure proper order.
+        - Prevents artificial reconnections at the last segment.
+        - Avoids gaps larger than 50 pixels between points.
 
         Args:
             contour (numpy.ndarray): Original contour points (Nx1x2).
@@ -101,49 +105,60 @@ class ContourExtraction:
 
         Returns:
             tuple:
-                - reordered_contour (numpy.ndarray): A single reordered contour following continuity.
-                - contour_segments (list of numpy.ndarray): Separate contour segments split at gaps.
+                - np.ndarray: A single reordered contour maintaining continuity.
+                - list: List of separate contour segments for verification.
         """
-        # Step 1: Create a dictionary to track point indices and coordinates
-        point_dict = {i: tuple(contour[i][0]) for i in range(len(contour))}
+        # Step 1: Ensure contour is open by checking closure
+        contour = contour.reshape(-1, 2)  # Convert to Nx2 shape
+        if np.linalg.norm(contour[0] - contour[-1]) < 2:  # If first and last points are close, remove last point
+            contour = contour[:-1]  # Remove last point to force openness
 
-        # Step 2: Identify valid points within the mask
+        # Step 2: Identify valid points inside the mask
+        point_dict = {i: tuple(contour[i]) for i in range(len(contour))}
         valid_points = {i: point_dict[i] for i in point_dict if mask[point_dict[i][1], point_dict[i][0]] > 0}
         valid_indices = sorted(valid_points.keys())
 
         if not valid_indices:
             return None, []  # No valid points remain
 
-        # Step 3: Detect all gaps in valid indices
-        gap_indices = []
+        # Step 3: Detect gaps in valid indices and split into segments
+        segments = []
+        current_segment = [valid_points[valid_indices[0]]]
+
         for i in range(1, len(valid_indices)):
-            if valid_indices[i] - valid_indices[i - 1] > 1:  # Found a gap
-                gap_indices.append(i)
+            gap_distance = np.linalg.norm(
+                np.array(valid_points[valid_indices[i]]) - np.array(valid_points[valid_indices[i - 1]]))
+            if gap_distance > 50:  # A large gap exists, break here
+                if len(current_segment) > 1:  # Ignore single-point segments
+                    segments.append(np.array(current_segment, dtype=np.int32).reshape(-1, 1, 2))
+                current_segment = []  # Start a new segment
 
-        # Step 4: Split valid points into segments
-        contour_segments = []
-        start_idx = 0
-        for gap_idx in gap_indices:
-            segment_indices = valid_indices[start_idx:gap_idx]
-            segment = [valid_points[i] for i in segment_indices]
-            if len(segment) > 1:
-                contour_segments.append(np.array(segment, dtype=np.int32).reshape(-1, 1, 2))
-            start_idx = gap_idx
+            current_segment.append(valid_points[valid_indices[i]])
 
-        # Add the final segment
-        segment_indices = valid_indices[start_idx:]
-        segment = [valid_points[i] for i in segment_indices]
-        if len(segment) > 1:
-            contour_segments.append(np.array(segment, dtype=np.int32).reshape(-1, 1, 2))
+        # Add the last segment if any points remain
+        if len(current_segment) > 1:
+            segments.append(np.array(current_segment, dtype=np.int32).reshape(-1, 1, 2))
 
-        # Step 5: Reorder points by choosing the segment after the largest gap as the new starting point
-        if len(contour_segments) > 1:
-            reordered_contour = np.vstack(contour_segments[::-1])  # Reverse segment order for natural flow
+        # Step 4: Reconnect segments using Nearest Neighbor approach
+        if len(segments) > 1:
+            reordered_contour = [segments[0]]  # Start with the first segment
+            remaining_segments = segments[1:]
+
+            while remaining_segments:
+                last_point = reordered_contour[-1][-1]  # Last point of the current sequence
+                closest_idx = np.argmin(
+                    [np.linalg.norm(seg[0] - last_point) for seg in remaining_segments])  # Find closest segment
+                closest_segment = remaining_segments.pop(closest_idx)
+
+                # Prevent gaps larger than 50 pixels when merging
+                if np.linalg.norm(closest_segment[0] - last_point) <= 50:
+                    reordered_contour.append(closest_segment)
+
+            reordered_contour = np.vstack(reordered_contour)  # Stack into a single array
         else:
-            reordered_contour = contour_segments[0] if contour_segments else None
+            reordered_contour = segments[0] if segments else None
 
-        return reordered_contour, contour_segments
-
+        return reordered_contour, segments
 
     def visualize_contours(self, full_contours, valid_parts_contours, segment_contours, valid_parts=None):
         """
@@ -170,13 +185,13 @@ class ContourExtraction:
             cv2.polylines(annotated_image, [line], isClosed=False, color=(255, 255, 0), thickness=4)
 
         # Draw reordered contours in Green
-        for line in valid_parts_contours:
-            cv2.polylines(annotated_image, [line], isClosed=False, color=(0, 255, 0), thickness=2)
+        # for line in valid_parts_contours:
+        #     cv2.polylines(annotated_image, [line], isClosed=False, color=(0, 255, 0), thickness=2)
 
         # Draw segmented contours in Red
-        # for segments in segment_contours:
-        #     for line in segments:
-        #         cv2.polylines(annotated_image, [line], isClosed=False, color=(0, 0, 255), thickness=2)
+        for segments in segment_contours:
+            for line in segments:
+                cv2.polylines(annotated_image, [line], isClosed=False, color=(0, 0, 255), thickness=2)
 
         # Draw valid parts in Cyan (if provided)
         if valid_parts is not None:

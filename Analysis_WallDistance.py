@@ -199,15 +199,16 @@ class MidlineExtractor:
 
         return intersection, min_dist
 
-    def compute_distances(self, valid_parts_contours, step=10, visualize=False):
+    def compute_distances(self, valid_parts_contours, step=10, visualize=True):
         """
         Computes distances from perpendicular lines at midline points to the contour walls.
+        - Stops perpendicular lines at the intersection points with contours.
         - Skips perpendicular lines if they do not intersect both contours.
-        - Returns used lines and highlights the maximum distance line.
+        - Visualizes used lines, highlighting the longest.
 
         Args:
             valid_parts_contours (list of np.ndarray): List containing exactly two contours.
-            step (int): Step size to sample midline points.
+            step (int): Step size to sample midline points for perpendicular line computation.
             visualize (bool): Whether to visualize the perpendicular lines.
 
         Returns:
@@ -243,11 +244,11 @@ class MidlineExtractor:
                 direction = midline[i] - midline[i - 1]
             perp_vector = self.perpendicular_vector(direction / np.linalg.norm(direction))
 
-            # Extend the perpendicular line
-            perp_line_start = p - 100 * perp_vector
-            perp_line_end = p + 100 * perp_vector
+            # Extend the perpendicular line (initial long line)
+            perp_line_start = p - 500 * perp_vector
+            perp_line_end = p + 500 * perp_vector
 
-            # Find intersections
+            # Find intersections with contours
             intersection1, dist1 = self.find_intersection((perp_line_start, perp_line_end), contour1)
             intersection2, dist2 = self.find_intersection((perp_line_start, perp_line_end), contour2)
 
@@ -255,8 +256,12 @@ class MidlineExtractor:
             if intersection1 is None or intersection2 is None:
                 continue
 
+            # Ensure the perpendicular line is cropped at the intersections
+            perp_line_start = intersection1
+            perp_line_end = intersection2
+
             # Compute total distance
-            total_distance = dist1 + dist2
+            total_distance = np.linalg.norm(intersection1 - intersection2)
             distances.append(total_distance)
             used_lines.append((perp_line_start, perp_line_end))
 
@@ -265,7 +270,12 @@ class MidlineExtractor:
                 max_distance = total_distance
                 max_line = (perp_line_start, perp_line_end)
 
+        # Visualization
+        if visualize:
+            self.visualize_contours_on_image(self.full_image, self.mask, valid_parts_contours, midline, used_lines, max_line)
+
         return midline, distances, max_distance, used_lines, max_line
+
 
     def compute_midline(self, contour1, contour2):
         """
