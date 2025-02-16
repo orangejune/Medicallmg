@@ -14,8 +14,11 @@ blue_image_path = r"KD/New/KD-3-dengjinyi/KD-3-dengjinyi/Series-001/jpg-img-0000
 # blue_image_path = r"KD/New/KD-3-dengjinyi/KD-3-dengjinyi/3-5LAD描记.dcm"  # Replace with your image with blue lines
 
 ##todo: use a pair of images -- every pair onrigial and lableded
-full_image_path = r"KD/New/冠脉瘤1-wangziyi/KD-CAL-wangziyi/1-左冠脉整体.dcm"  # Replace with your grayscale image path
-blue_image_path = r"KD/New/冠脉瘤1-wangziyi/KD-CAL-wangziyi/2-LCA LAD描记.dcm"  # Replace with your image with blue lines
+# full_image_path = r"KD/New/冠脉瘤1-wangziyi/KD-CAL-wangziyi/1-左冠脉整体.dcm"  # Replace with your grayscale image path
+# blue_image_path = r"KD/New/冠脉瘤1-wangziyi/KD-CAL-wangziyi/2-LCA LAD描记.dcm"  # Replace with your image with blue lines
+
+full_image_path = r"KD/New/KD-2-chentianxiang/KD-2-chentianxiang/2-8LAD原始.dcm"  # Replace with your grayscale image path
+blue_image_path = r"KD/New/KD-2-chentianxiang/KD-2-chentianxiang/2-10LAD描记.dcm"  # Replace with your image with blue lines
 
 ##todo: mask parameter
 hsv_ranges = {
@@ -26,7 +29,7 @@ hsv_ranges = {
     "yellow": [(np.array([20, 100, 100]), np.array([30, 255, 255]))] ##todo: better not use yellow
 }
 target_bbox = (160, 70, 910, 500)  # Bounding box (left, top, right, bottom)
-buffer_size = 15  # Example buffer size in pixels
+buffer_size = 10  # Example buffer size in pixels
 maskcnt_min = 10
 ##todo: extraction parameter
 # Parameters for boundary extraction
