@@ -1,105 +1,169 @@
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
-
-class RegionDecomposer:
-    def __init__(self, image, mask):
-        self.image = image
-        self.mask  = mask
+from Analysis_ReadImg import Analysis_ReadImg
+from Analysis_MaskColor import MaskBufferExtractor
 
 
-    def split_image_with_mask(self, image, mask, min_size=32, variance_threshold=500):
+class AdaptiveRegionDecomposition:
+    def __init__(self, full_image_path, blue_image_path, is_dicom=True, hsv_ranges=None, bbox=None, buffer_size=10,
+                 min_region_size=500, min_size=50, intensity_threshold=20):
         """
-        Decomposes an image based on pixel intensity variance and mask guidance.
+        Adaptive Region Decomposition using recursive region splitting based on pixel intensity.
+
+        Optimized to start within the bounding box of the buffered mask to speed up processing.
 
         Args:
-            image (numpy.ndarray): Grayscale input image.
-            mask (numpy.ndarray): Binary mask highlighting important regions (same size as image).
-            min_size (int): Minimum region size before stopping the split.
-            variance_threshold (float): Variance threshold for further splitting.
-
-        Returns:
-            regions (list): List of image patches with bounding box coordinates.
+            min_size (int): Minimum allowed size for any split region. If smaller, stop splitting.
         """
-        h, w = image.shape
-        regions = []
+        # Load images using Analysis_ReadImg
+        readimg = Analysis_ReadImg(full_image_path, blue_image_path, is_dicom)
+        self.image = readimg.full_image  # Grayscale full image
+        self.blue_image = readimg.blue_image  # Image with labeled regions
 
-        def recursive_split(x, y, width, height):
-            # Extract region
-            sub_img = image[y:y + height, x:x + width]
-            sub_mask = mask[y:y + height, x:x + width]
+        # Convert to grayscale if it's a 3-channel image
+        if len(self.image.shape) == 3:
+            self.image = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
 
-            # Compute intensity variance
-            variance = np.var(sub_img)
+        # Extract masks using MaskBufferExtractor
+        self.extractor = MaskBufferExtractor(self.image, self.blue_image)
+        self.mask = self._extract_masks(hsv_ranges, bbox, buffer_size)
 
-            # Check if the mask is present in this region
-            mask_presence = np.count_nonzero(sub_mask) > 0
+        # Get the bounding box of the buffered mask to start splitting within that region
+        self.bounding_box = self._find_mask_bounding_box()
 
-            # If the region is small enough or has low variance AND no mask feature, stop splitting
-            if width <= min_size or height <= min_size or (variance < variance_threshold and not mask_presence):
-                regions.append(((x, y, width, height), sub_img))
-                return
+        self.min_region_size = min_region_size
+        self.min_size = min_size  # Stop splitting when region is too small
+        self.intensity_threshold = intensity_threshold
+        self.regions = []
 
-            # Split into 4 quadrants (Quadtree-like)
-            half_w, half_h = width // 2, height // 2
+    def _extract_masks(self, hsv_ranges, bbox, buffer_size):
+        """Extract and buffer masks using the specified color HSV ranges."""
+        if hsv_ranges is None:
+            return None
 
-            recursive_split(x, y, half_w, half_h)
-            recursive_split(x + half_w, y, half_w, half_h)
-            recursive_split(x, y + half_h, half_w, half_h)
-            recursive_split(x + half_w, y + half_h, half_w, half_h)
+        for color, ranges in hsv_ranges.items():
+            print(f"Processing color: {color}")
+            mask, maskcnt = self.extractor.create_color_mask(self.blue_image, mask_name=color, hsv_ranges=ranges,
+                                                             bbox=bbox)
+            if maskcnt < 10:  # Ignore small masks
+                continue
+            return self.extractor.create_buffered_mask(mask_name=color, buffer_size=buffer_size)
 
-        # Start recursive splitting from the full image
-        recursive_split(0, 0, w, h)
+        return None
 
-        return regions
+    def _find_mask_bounding_box(self):
+        """Find the bounding box around the buffered mask to start splitting within that region."""
+        if self.mask is None:
+            return (0, 0, self.image.shape[1], self.image.shape[0])  # Full image as fallback
 
+        # Find contours of the mask to determine bounding box
+        contours, _ = cv2.findContours(self.mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            return (0, 0, self.image.shape[1], self.image.shape[0])  # Fallback to full image
 
-    def generate_mask(self, image, line_positions):
+        x, y, w, h = cv2.boundingRect(np.vstack(contours))  # Get the bounding box
+        return (x, y, x + w, y + h)  # Return bounding box as (x1, y1, x2, y2)
+
+    def split_region(self, x1, y1, x2, y2):
         """
-        Creates a binary mask with two lines for guiding decomposition.
+        Recursively split regions based on pixel intensity variance.
+
+        Stops splitting if the region size is smaller than `self.min_size`.
 
         Args:
-            image (numpy.ndarray): Grayscale input image.
-            line_positions (list of tuples): List of (x1, y1, x2, y2) coordinates for lines.
-
-        Returns:
-            mask (numpy.ndarray): Binary mask.
+            x1, y1: Top-left corner of the region.
+            x2, y2: Bottom-right corner of the region.
         """
-        mask = np.zeros_like(image, dtype=np.uint8)
-        for (x1, y1, x2, y2) in line_positions:
-            cv2.line(mask, (x1, y1), (x2, y2), 255, 2)  # Draw white lines on black mask
-        return mask
+        width = x2 - x1
+        height = y2 - y1
 
+        # Stop if the region is too small
+        if width < self.min_size or height < self.min_size:
+            self.regions.append((x1, y1, x2, y2))  # Keep the small region
+            return
 
-    def visualize_regions(self, image, regions):
-        """
-        Visualizes the decomposed image regions.
+        region = self.image[y1:y2, x1:x2]
 
-        Args:
-            image (numpy.ndarray): Original grayscale image.
-            regions (list): List of (bounding_box, sub_image) tuples.
-        """
-        output = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+        # Check intensity variance
+        min_intensity = np.min(region)
+        max_intensity = np.max(region)
+        intensity_diff = max_intensity - min_intensity
 
-        for (x, y, w, h), _ in regions:
-            cv2.rectangle(output, (x, y), (x + w, y + h), (0, 255, 0), 1)
+        # Stop splitting if variation is small or region is below min size
+        if intensity_diff < self.intensity_threshold:
+            self.regions.append((x1, y1, x2, y2))  # Store rectangular region
+            return
 
-        plt.figure(figsize=(8, 6))
-        plt.imshow(output)
-        plt.title("Image Decomposition with Mask Guidance")
+        # Choose split direction (horizontal or vertical)
+        if width > height:  # Wider region, split vertically
+            mid_x = (x1 + x2) // 2
+            self.split_region(x1, y1, mid_x, y2)
+            self.split_region(mid_x, y1, x2, y2)
+        else:  # Taller region, split horizontally
+            mid_y = (y1 + y2) // 2
+            self.split_region(x1, y1, x2, mid_y)
+            self.split_region(x1, mid_y, x2, y2)
+
+    def region_decomposition(self):
+        """Start recursive region splitting within the mask bounding box."""
+        x1, y1, x2, y2 = self.bounding_box
+        self.split_region(x1, y1, x2, y2)
+
+    def refine_regions_with_mask(self):
+        """Keep regions that intersect with the mask, even if not fully inside."""
+        if self.mask is None:
+            return
+
+        new_regions = []
+        for (x1, y1, x2, y2) in self.regions:
+            region_mask = self.mask[y1:y2, x1:x2]
+            if np.count_nonzero(region_mask) > 0:  # Keep if any pixel overlaps
+                new_regions.append((x1, y1, x2, y2))
+
+        self.regions = new_regions
+
+    def visualize_regions(self):
+        """Overlay decomposed rectangular regions on the original image."""
+        output_image = cv2.cvtColor(self.image, cv2.COLOR_GRAY2BGR)
+
+        for (x1, y1, x2, y2) in self.regions:
+            color = tuple(np.random.randint(0, 255, 3).tolist())  # Random color
+            cv2.rectangle(output_image, (x1, y1), (x2, y2), color, 2)
+
+        plt.figure(figsize=(10, 6))
+        plt.imshow(output_image)
+        plt.title("Optimized Adaptive Region Decomposition (Starts in Mask Bounding Box)")
+        plt.axis("off")
         plt.show()
 
+    def run(self):
+        """Run the full region decomposition process."""
+        self.region_decomposition()
+        if self.mask is not None:
+            self.refine_regions_with_mask()
+        self.visualize_regions()
 
-# Example usage
-image = ""
 
-# Generate the mask
-mask = ""
 
-rd = RegionDecomposer(image, mask)
 
-# Decompose the image using both intensity and mask presence
-regions = rd. split_image_with_mask(image, mask, min_size=32, variance_threshold=500)
+# Example Usage
+# full_image_path = r"KD/New/KD-2-chentianxiang/KD-2-chentianxiang/2-8LAD原始.dcm"
+# blue_image_path = r"KD/New/KD-2-chentianxiang/KD-2-chentianxiang/2-10LAD描记.dcm"
+full_image_path = r"KD/New/KD-3-dengjinyi/KD-3-dengjinyi/3-4LAD原始.dcm"  # Replace with your grayscale image path
+blue_image_path = r"KD/New/KD-3-dengjinyi/KD-3-dengjinyi/3-5LAD描记.dcm"  # Replace with your image with blue lines
 
-# Visualize the decomposition
-rd. visualize_regions(image, regions)
+hsv_ranges = {
+    "red": [(np.array([0, 100, 100]), np.array([10, 255, 255])),
+            (np.array([160, 100, 100]), np.array([179, 255, 255]))]
+}
+target_bbox = (160, 70, 910, 500)
+buffer_size = 10
+min_region_size = 500
+min_size = 120  # Stop splitting if region is smaller than this size
+
+decomposer = AdaptiveRegionDecomposition(
+    full_image_path, blue_image_path, is_dicom=True, hsv_ranges=hsv_ranges, bbox=target_bbox, buffer_size=buffer_size,
+    min_region_size=min_region_size, min_size=min_size
+)
+decomposer.run()
