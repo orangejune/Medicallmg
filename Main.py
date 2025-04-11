@@ -6,6 +6,8 @@ from Analysis_MaskColor import *
 from Analysis_Distance import *
 
 from Analysis_WallDistance import *
+from Analysis_TrimContour import *
+from Analysis_DistanceRatio import *
 
 full_image_path = r"KD/New/KD-3-dengjinyi/KD-3-dengjinyi/Series-001/jpg-img-00001-00003.jpg"  # Replace with your grayscale image path
 blue_image_path = r"KD/New/KD-3-dengjinyi/KD-3-dengjinyi/Series-001/jpg-img-00001-00004.jpg"  # Replace with your image with blue lines
@@ -38,12 +40,15 @@ morph_kernel = (10, 10)         # Morphological kernel size
 min_area = 500                # Minimum area to keep a contour
 bbox = (160, 70, 910, 500)    # Bounding box (left, top, right, bottom)
 min_size = 120                 # Stop splitting bounding box if region is smaller than this size
+if_trim_contour = False  # If the contour need to be trimmed
 
 ##todo: read img
 readimg = Analysis_ReadImg(full_image_path, blue_image_path, True)
 ##todo: extract mask
 # Initialize the extractor
 extractor = MaskBufferExtractor(readimg.full_image, readimg.blue_image)
+# Determine the distance conversion ratio
+distance_ratio = cal_distance_ratio(readimg.full_image)
 # Input parameters
 # todo:Process each color to produce a buffer zone
 for color, ranges in hsv_ranges.items():
@@ -112,14 +117,31 @@ for color, ranges in hsv_ranges.items():
                             md_extractor = MidlineExtractor(n_points=100, smoothing=True)
                             # Compute the midline and distances
                             midline, distances, max_distance, used_lines, max_line = md_extractor.compute_distances(
-                                valid_parts_contours, step=10, visualize=False)
+                                valid_parts_contours, step=1, visualize=False)
+
+                            distances /= distance_ratio
+                            max_distance /= distance_ratio
 
                             ce.visualize_contours_on_image(readimg.full_image, full_contours, valid_parts_contours,
-                                                           segment_contours, midline, used_lines, max_line,
+                                                           segment_contours, midline, used_lines, max_line, max_distance, distances,
                                                            save_path="KD/"+f"{color.capitalize()}"
                                                                            f"_Mask_pixel_{i_pixel_min}_{i_pixel_max}_area_{i_area}_sample_{i_n_pt}_dstep_{i_nstep}"+"output_contours.png")
-
-
+                            if if_trim_contour == True:
+                                # todo: the drawn line needs to have four intersection points with the contour.
+                                #  Further improvements are needed to handle cases where there are no intersection points.
+                                cc = ContourTrimmer(readimg.full_image, valid_parts_contours)
+                                trimmed_contours = cc.trim_contour()
+                                # Recalculate the midline and distances
+                                md_extractor = MidlineExtractor(n_points=100, smoothing=True)
+                                midline, distances, max_distance, used_lines, max_line = md_extractor.compute_distances(
+                                    trimmed_contours, step=1, visualize=False)
+                                distances /= distance_ratio
+                                max_distance /= distance_ratio
+                                ce.visualize_contours_on_image(readimg.full_image, full_contours, trimmed_contours,
+                                                               segment_contours, midline, used_lines, max_line,
+                                                               max_distance, distances,
+                                                               save_path="KD/" + f"{color.capitalize()}"
+                                                                                 f"_Mask_pixel_{i_pixel_min}_{i_pixel_max}_area_{i_area}_sample_{i_n_pt}_dstep_{i_nstep}" + "output_contours.png")
 
                     # ##todo: create a distance computation object
                     # distance_check = DistanceChecker(restricted_contours, readimg.full_image)

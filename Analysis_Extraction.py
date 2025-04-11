@@ -190,22 +190,22 @@ class ContourExtraction:
 
         # Draw full contours in Cyan
         for line in full_contours:
-            cv2.polylines(annotated_image, [line], isClosed=False, color=(255, 255, 0), thickness=4)
+            cv2.polylines(annotated_image, [line], isClosed=False, color=(255, 255, 0), thickness=1)
 
         # Draw reordered contours in Red
         for line in valid_parts_contours:
             cv2.polylines(annotated_image, [line], isClosed=False, color=(0, 0, 255), thickness=2)
 
         # Draw segmented contours in Blue
-        for segments in segment_contours:
-            for line in segments:
-                cv2.polylines(annotated_image, [line], isClosed=False, color=(255, 0, 0), thickness=1)
+        # for segments in segment_contours:
+        #     for line in segments:
+        #         cv2.polylines(annotated_image, [line], isClosed=False, color=(255, 0, 0), thickness=1)
 
         # Draw contours of mask in Yellow (if provided)
-        if mask is not None:
-            mask_contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            for line in mask_contours:
-                cv2.polylines(annotated_image, [line], isClosed=True, color=(0, 255, 255), thickness=1)
+        # if mask is not None:
+        #     mask_contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        #     for line in mask_contours:
+        #         cv2.polylines(annotated_image, [line], isClosed=True, color=(0, 255, 255), thickness=1)
 
         # # Draw valid parts in Cyan (if provided)
         # if valid_parts is not None:
@@ -218,7 +218,7 @@ class ContourExtraction:
         cv2.destroyAllWindows()  # Close the window after key press
 
     def visualize_contours_on_image(self, full_image, full_contours, valid_parts_contours, segment_contours,
-                                    midline=None, used_lines=None, max_line=None,
+                                    midline=None, used_lines=None, max_line=None, max_distance=None, distances=None,
                                     save_path="contour_visualization.png"):
         """
         Visualizes contours, midline, and perpendicular lines overlaid on the original image.
@@ -245,8 +245,8 @@ class ContourExtraction:
             annotated_image = full_image.copy()
 
         # Draw full contours in Yellow
-        for line in full_contours:
-            cv2.polylines(annotated_image, [line], isClosed=False, color=(255, 255, 0), thickness=1)
+        # for line in full_contours:
+        #     cv2.polylines(annotated_image, [line], isClosed=False, color=(255, 255, 0), thickness=1)
 
         # Draw reordered valid contours in Green
         for line in valid_parts_contours:
@@ -276,6 +276,9 @@ class ContourExtraction:
             pt1 = tuple(map(int, max_line[0]))
             pt2 = tuple(map(int, max_line[1]))
             cv2.line(annotated_image, pt1, pt2, (0, 255, 255), 3)
+            midpoint = ((pt1[0] + pt2[0]) // 2, (pt1[1] + pt2[1]) // 2)
+            cv2.putText(annotated_image, f"Max: {(max_distance):.2f}mm, Avg: {(np.mean(distances)):.2f}mm", midpoint, cv2.FONT_HERSHEY_SIMPLEX,
+                        0.6, (255, 255, 255), 2, cv2.LINE_AA)  # Annotate with max and average diameter value
 
         # Save the annotated image
         cv2.imwrite(save_path, annotated_image)
