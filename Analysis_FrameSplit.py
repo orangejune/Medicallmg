@@ -25,5 +25,5 @@ def extract_frames(video_path, output_folder, frame_interval=1):
     print(f"Extracted {saved_count} frames to {output_folder}")
 
 
-# Example usage
-extract_frames(r"D:\Cardio\Videos\Media1.mp4", r"D:\Cardio\Videos\Media1", frame_interval=1)
+if __name__ == "__main__":
+    extract_frames(r".\heart_cycles\Media1.mp4", r".\heart_cycles\Media1", frame_interval=1)

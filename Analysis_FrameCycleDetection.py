@@ -1,3 +1,4 @@
+import os
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
@@ -62,14 +63,10 @@ def detect_heartbeat_cycles(video_path):
     plt.ylabel("Normalized Motion")
     plt.title("Detected Heartbeat Cycles")
     plt.legend()
-    plt.show()
+    # plt.show()
 
     return cycle_frames, peaks
 
-
-
-
-import os
 
 def split_video_by_cycles(video_path, cycle_frames, output_folder="heart_cycles"):
     os.makedirs(output_folder, exist_ok=True)
@@ -89,13 +86,13 @@ def split_video_by_cycles(video_path, cycle_frames, output_folder="heart_cycles"
     cap.release()
     print("\nVideo segmentation complete.")
 
-# Example usage
-video_path = r"D:\Cardio\Videos\Media2.mp4"
-cycle_frames, peak_frames = detect_heartbeat_cycles(video_path)
+if __name__ == "__main__":
+    video_path = r".\heart_cycles\Media1.mp4"
+    cycle_frames, peak_frames = detect_heartbeat_cycles(video_path)
 
-# Print peak frames separately
-print("\nDetected Peak Frames (Contractions):", peak_frames)
+    # Print peak frames separately
+    print("\nDetected Peak Frames (Contractions):", peak_frames)
 
-# Example usage
-# split_video_by_cycles(video_path, cycle_frames)
+    # Example usage
+    # split_video_by_cycles(video_path, cycle_frames)
 

@@ -4,7 +4,6 @@ import os
 import random
 import networkx as nx
 from collections import deque
-from Analysis_FrameExtraction import *
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from collections import defaultdict
