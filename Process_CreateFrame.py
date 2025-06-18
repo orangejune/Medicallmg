@@ -23,7 +23,7 @@ def extract_all_frames_with_unicode_paths(video_root, output_folder, video_exten
                 video_name = os.path.splitext(filename)[0]
                 prefix = f"{relative_path}_{video_name}" if relative_path != "." else video_name
 
-                print(f"▶️ Processing video: {video_path}")
+                print(f"Processing video: {video_path}")
                 cap = cv2.VideoCapture(video_path)
                 frame_idx = 0
 
