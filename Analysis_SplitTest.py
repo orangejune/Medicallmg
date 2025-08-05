@@ -2,10 +2,6 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 
-import cv2
-import numpy as np
-import matplotlib.pyplot as plt
-
 
 class ImageContourExtractor:
     def __init__(self, image_path, grid_size=(4, 4)):

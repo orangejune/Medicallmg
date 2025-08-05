@@ -6,22 +6,23 @@ import os
 import cv2
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras.applications import MobileNetV2
-from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
-from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Conv2D, MaxPooling2D, Flatten, Dropout, Input, Concatenate
-from tensorflow.keras.models import Model, load_model
-from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.losses import CategoricalCrossentropy
-from tensorflow.keras.utils import Sequence
-from tensorflow.keras.callbacks import ModelCheckpoint
+from keras.applications import MobileNetV2
+from keras.applications.mobilenet_v2 import preprocess_input
+from keras.layers import Dense, GlobalAveragePooling2D, Conv2D, MaxPooling2D, Flatten, Dropout, Input, Concatenate
+from keras.models import Model, load_model
+from keras.optimizers import Adam
+from keras.losses import CategoricalCrossentropy
+from keras.utils import Sequence
+from keras.callbacks import ModelCheckpoint
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn.model_selection import train_test_split
 from PIL import Image
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 from Process_CreateFrame import *
 
-ROI = (100, 50, 950, 700)
+ROI = (250, 150, 850, 550) #todo
 IMG_SIZE = (ROI[3] - ROI[1], ROI[2] - ROI[0])  # (height, width)
 
 class ImagePredictor:
@@ -46,9 +47,9 @@ class ImagePredictor:
         return [X_raw, X_line]
 
     def predict_and_save(self):
-        log_path = os.path.join(self.output_folder, "predicted_log.txt")
+        log_path = os.path.join(self.output_folder, "predicted_log2.txt")
         with open(log_path, "w", encoding="utf-8") as log:
-            for fname in sorted(os.listdir(self.input_folder)):
+            for fname in tqdm(sorted(os.listdir(self.input_folder))):
                 if not fname.lower().endswith((".jpg", ".png", ".jpeg")):
                     continue
                 path = os.path.join(self.input_folder, fname)
@@ -63,7 +64,7 @@ class ImagePredictor:
 
                     if confidence >= self.conf_threshold:
                         img = cv2.imread(path)
-                        out_path = os.path.join(self.output_folder, f"{label}_{confidence:.2f}_{fname}")
+                        out_path = os.path.join(self.output_folder, f"pre={label}_{fname.split('.')[0]}_{confidence:.2f}.jpg")
                         cv2.imwrite(out_path, img)
 
                 except Exception as e:
@@ -84,10 +85,10 @@ def load_balanced_image_paths(data_dir, label_map, balance=True):
 
     if balance:
         min_count = min(len(v) for v in class_image_dict.values())
-        print(f"🔄 Balancing to {min_count} images per class")
+        print(f"Balancing to {min_count} images per class")
     else:
         min_count = None
-        print("📊 Using all available images per class")
+        print("Using all available images per class")
 
     for label, paths in class_image_dict.items():
         if balance:
@@ -98,16 +99,23 @@ def load_balanced_image_paths(data_dir, label_map, balance=True):
     return file_paths, labels
 
 if __name__ == "__main__":
+    model_dir = '0704_gen'
     # Example usage of ImagePredictor
-    extract_all_frames_with_unicode_paths("Data/Cardio/GEData/冠脉病例GE-1/冠脉病例GE-1/2025022wangdongyue/",
-                                          "Data/Cardio/GEData/videotest") ##todo: add a video here
+    # frame_path = "data/videotest2"
+    # video_path = 'data/冠脉病例GE-2'
+    # for dir in tqdm(os.listdir(video_path)):
+    #     extract_all_frames_with_unicode_paths(os.path.join(video_path,dir),frame_path) ##todo: add a video here
+
+    video_path = 'data/test_video'
+    frame_path = "data/test_video_frame"
+    # extract_all_frames_with_unicode_paths(video_path,frame_path) ##todo: add a video here
 
     predictor = ImagePredictor(
-        model_path="latest_model.h5", ##todo: pretrained model
-        label_file="filtered_frames/label_index.txt",
-        input_folder="Data/Cardio/GEData/videotest",
-        output_folder="predicted_outputs",
-        conf_threshold=0.9
+        model_path=f"{model_dir}/best_model.h5", ##todo: pretrained model
+        label_file=f"{model_dir}/label_index.txt",
+        input_folder=frame_path,
+        output_folder=f"{model_dir}/predicted_outputs",
+        conf_threshold=0.85
     )
 
     predictor.predict_and_save()
