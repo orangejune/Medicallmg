@@ -129,3 +129,46 @@ if __name__ == "__main__":
 
     ratio = cal_distance_ratio(img)
     print(f'ratio:{ratio}')
+
+
+
+##todo: when delta info is present
+import math
+import pydicom
+
+
+def pixel_distance(p1, p2):
+    """Euclidean distance between two points in pixels."""
+    return math.sqrt((p2[0] - p1[0]) ** 2 + (p2[1] - p1[1]) ** 2)
+
+
+def distance_in_mm(dcm_file, p1, p2):
+    # Load DICOM
+    ds = pydicom.dcmread(dcm_file)
+
+    # Get PhysicalDeltaX (assume same for X/Y)
+    physical_delta_x = float(ds.get("PhysicalDeltaX", 0))  # in cm/pixel
+
+    # Convert to mm/pixel
+    mm_per_pixel = physical_delta_x * 10.0
+
+    # Pixel distance
+    d_px = pixel_distance(p1, p2)
+
+    # Real distance in mm
+    d_mm = d_px * mm_per_pixel
+
+    return d_px, d_mm, mm_per_pixel
+
+
+# test :
+p1 = (439, 367)
+p2 = (454, 397)
+dcm_file = r"KD/New/KD-3-dengjinyi/KD-3-dengjinyi/3-4LAD原始.dcm"
+
+d_px, d_mm, mm_per_pixel = distance_in_mm(dcm_file, p1, p2)
+print(f"Pixel distance: {d_px:.2f} px")
+print(f"Scale: {mm_per_pixel:.5f} mm/px")
+print(f"Real distance: {d_mm:.2f} mm")
+
+##  todo: use the info    (0018,602C)	Physical DeltaX	0.00703049
