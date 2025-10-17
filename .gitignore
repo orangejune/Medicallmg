@@ -2,3 +2,6 @@ __pycache__/
 *.jpg
 *.png
 *.avi
+*.mp4
+*.json
+*.txt

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8" />
+    <title>医学影像分析系统</title>
+    <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav>
+        <a href="#" class="menu-button">文件导入</a>
+        <a href="#" class="menu-button">信息视图</a>
+        <a href="#" class="menu-button">手动测量</a>
+        <a href="#" class="menu-button">报告导出</a>
+        <a href="#" class="menu-button">帮助</a>
+    </nav>
+
+    <div class="container">
+        <!-- 左侧文件列表 -->
+        <div class="sidebar">
+            <h3>文件</h3>
+            <ul id="file-list">
+                <li class="file-item" data-file="P8SCB182">P8SCB182</li>
+                <li class="file-item" data-file="P8SCB602">P8SCB602</li>
+                <li class="file-item" data-file="P8SCBE02">P8SCBE02</li>
+                <!-- 更多文件... -->
+            </ul>
+        </div>
+
+        <!-- 中间图像显示区 -->
+        <div class="main-content">
+            <!-- 像素距离信息显示 -->
+            <div id="pixel-spacing-info" style="padding: 10px; background-color: #f0f0f0; margin-bottom: 10px;">
+                像素距离信息: <span id="pixel-spacing-value">未加载</span>
+            </div>
+            
+            <img id="image-display" src="" alt="DICOM 图像" style="width: 100%; height: auto;" />
+
+            <!-- 控制按钮 -->
+            <div class="controls">
+                <button class="menu-button">上一帧</button>
+                <button class="menu-button">播放/暂停</button>
+                <button class="menu-button">下一帧</button>
+                <button class="menu-button">开始测量</button>
+            </div>
+
+            <!-- 测量结果叠加层 -->
+            <div id="measurement-overlay"></div>
+        </div>
+
+        <!-- 右侧备选帧 -->
+        <div class="sidebar right-sidebar">
+            <h3>备选帧</h3>
+            <div id="candidate-frames">
+                <!-- 动态加载 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 加载 JS -->
+    <script src="/static/js/viewer.js"></script>
+</body>
+</html>

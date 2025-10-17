@@ -1,12 +1,15 @@
 import cv2
 import numpy as np
 import os
+import shutil
 
 # --- 配置 ---
-NEGATIVE_IMAGE_DIR = 'path/to/your/negative_images' # 存放负样本图片的文件夹
-OUTPUT_MASK_DIR = 'dataset/masks' # 最终掩码输出的文件夹
+NEGATIVE_IMAGE_DIR = r'C:\Users\june.lin\Desktop\medicallmg\Medicallmg\U-Net\dataset\negative_img' # 存放负样本图片的文件夹
+OUTPUT_IMAGE_DIR = r'C:\Users\june.lin\Desktop\medicallmg\Medicallmg\U-Net\dataset\negative_images'
+OUTPUT_MASK_DIR = r'C:\Users\june.lin\Desktop\medicallmg\Medicallmg\U-Net\dataset\nagetive_masks' # 最终掩码输出的文件夹
 
 # 确保输出目录存在
+os.makedirs(OUTPUT_IMAGE_DIR,exist_ok=True)
 os.makedirs(OUTPUT_MASK_DIR, exist_ok=True)
 
 print("开始为负样本生成全黑掩码...")
@@ -29,6 +32,9 @@ for img_name in os.listdir(NEGATIVE_IMAGE_DIR):
     mask_filename = os.path.splitext(img_name)[0] + '.png'
     output_path = os.path.join(OUTPUT_MASK_DIR, mask_filename)
     
+    image_filename = os.path.splitext(img_name)[0] + '.png'
+    output_image_path = os.path.join(OUTPUT_IMAGE_DIR, image_filename)
+    shutil.copy2(img_path, output_image_path)
     # 保存全黑掩码
     cv2.imwrite(output_path, black_mask)
 

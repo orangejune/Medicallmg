@@ -7,18 +7,22 @@ import albumentations as A
 from albumentations.pytorch import ToTensorV2
 import segmentation_models_pytorch as smp
 from tqdm import tqdm
+from datetime import date
 
 # --- 1. 配置 ---
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 print(DEVICE)
-IMAGE_DIR = 'dataset/images'
-MASK_DIR = 'dataset/masks'
+
+file_path = os.path.dirname(__file__)
+IMAGE_DIR = os.path.join(file_path,'dataset/total_images')
+MASK_DIR = os.path.join(file_path,'dataset/total_masks')
 ENCODER = 'resnet34'
 ENCODER_WEIGHTS = 'imagenet'
 NUM_CLASSES = 2  # 0: background, 1: lumen
 BATCH_SIZE = 4
 EPOCHS = 50
 LEARNING_RATE = 1e-4
+tag = date.today().strftime('%m%d')
 
 # --- 2. 自定义数据集类 ---
 class VesselDataset(Dataset):
@@ -126,7 +130,7 @@ for epoch in range(EPOCHS):
     # 保存性能最好的模型
     if avg_val_loss < best_val_loss:
         best_val_loss = avg_val_loss
-        torch.save(model.state_dict(), 'best_model.pth')
+        torch.save(model.state_dict(), f'U-Net_model_result/unet_best_model_{tag}.pth')
         print("-> Best model saved!")
 
 print("训练完成！")

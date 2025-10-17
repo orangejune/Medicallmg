@@ -10,8 +10,9 @@ U-Net需要的是图像和其对应的掩码图 (Mask)。掩码图是一张与�
 
 '''
 # --- 配置 ---
-RAW_DATA_DIR = 'dataset/sample'  # 存放原始图片和LabelMe JSON文件的目录
-OUTPUT_DIR = 'dataset'     # 处理后数据的存放目录
+file_path = os.path.dirname(__file__)
+RAW_DATA_DIR = os.path.join(file_path,'dataset/train-positive')  # 存放原始图片和LabelMe JSON文件的目录
+OUTPUT_DIR = os.path.join(file_path,'dataset')     # 处理后数据的存放目录
 
 # 定义标签到类别ID的映射
 # ！！！重要：这个顺序决定了填充的顺序，把要被覆盖的类别放前面
@@ -64,12 +65,12 @@ def process_labelme_json():
         if os.path.exists(original_image_path):
             # 将原始图像复制到目标文件夹, 并换成png
             image_filename = os.path.splitext(image_filename)[0] + '.png'
-            output_image_path = os.path.join(images_output_dir, image_filename[4:])
+            output_image_path = os.path.join(images_output_dir, image_filename)
             shutil.copy2(original_image_path, output_image_path)
             
             # 保存掩码图
             mask_filename = image_filename
-            output_mask_path = os.path.join(masks_output_dir, mask_filename[4:])
+            output_mask_path = os.path.join(masks_output_dir, mask_filename)
             is_success, buffer = cv2.imencode('.png', mask)
             if is_success:
                 buffer.tofile(output_mask_path)
