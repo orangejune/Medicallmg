@@ -41,6 +41,7 @@ nav {
 .main-content {
     flex: 1;
     position: relative;
+    overflow: hidden;
 }
 
 .controls {
@@ -73,6 +74,7 @@ nav {
     width: 100%;
     height: 100%;
     pointer-events: none;
+    z-index: 5;
 }
 
 #pixel-spacing-info {
@@ -86,4 +88,10 @@ nav {
 
 #pixel-spacing-value {
     color: #1976d2;
+}
+
+#image-display {
+    max-width: 100%;
+    max-height: 100%;
+    display: block;
 }

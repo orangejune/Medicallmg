@@ -226,6 +226,68 @@ def process_dicom_to_frames(dicom_path, output_folder):
     except Exception as e:
         print(f"转换失败: {e}")
         return False, None, None
+
+def predict_contour_and_save(image_path, save_path):
+    """
+    使用 U-Net 预测边界并保存结果图像
+    """
+    # 加载和预处理图像
+    original_img = cv2.imread(image_path)
+    if original_img is None:
+        return None, None, None
+        
+    gray_img = cv2.cvtColor(original_img, cv2.COLOR_BGR2GRAY)
+    transformed = transform(image=gray_img)
+    input_tensor = transformed['image'].unsqueeze(0).to(DEVICE)
+
+    # 模型推理
+    with torch.no_grad():
+        logits = unet_model(input_tensor)
+    
+    # 计算概率
+    probs = F.softmax(logits, dim=1)
+    
+    # 获取预测掩码
+    pred_mask = torch.argmax(probs, dim=1).squeeze().cpu().numpy().astype(np.uint8)
+    
+    # 尺寸恢复到原始大小
+    pred_mask_resized = cv2.resize(pred_mask, (original_img.shape[1], original_img.shape[0]), 
+                                  interpolation=cv2.INTER_NEAREST)
+
+    # 提取血管腔轮廓
+    lumen_binary_mask = np.zeros_like(pred_mask_resized)
+    lumen_binary_mask[pred_mask_resized == LUMEN_CLASS_ID] = 255
+    
+    # 查找轮廓
+    all_contours, _ = cv2.findContours(lumen_binary_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    if not all_contours:
+        return None, None, None
+
+    # 找到最大的轮廓
+    largest_contour = max(all_contours, key=cv2.contourArea)
+    if cv2.contourArea(largest_contour) < 500:
+        return None, None, None
+
+    # 在原图上绘制轮廓
+    result_img = original_img.copy()
+    cv2.drawContours(result_img, [largest_contour], -1, (0, 0, 255), 3)
+    
+    # 保存结果图像
+    cv2.imwrite(save_path, result_img)
+    
+    # 计算平均置信度
+    confidence_map = torch.max(probs, dim=1)[0].squeeze().cpu().numpy()
+    confidence_map_resized = cv2.resize(confidence_map, (original_img.shape[1], original_img.shape[0]), 
+                                      interpolation=cv2.INTER_LINEAR)
+    
+    mask = np.zeros(confidence_map_resized.shape, np.uint8)
+    cv2.drawContours(mask, [largest_contour], -1, 255, 1)
+    contour_pixels_confidence = confidence_map_resized[mask == 255]
+    
+    avg_confidence = np.mean(contour_pixels_confidence) if len(contour_pixels_confidence) > 0 else 0
+    
+    return result_img, largest_contour, avg_confidence
     
 if __name__ == "__main__":
 
@@ -261,7 +323,7 @@ if __name__ == "__main__":
         pixel_spacing,_ = get_corrected_pixel_spacing(file_path)
 
         # ==================== YOLO模型预测，获得ROI图片 =================== #
-        # yolo_roi_img(yolo_model, input_folder,roi_folder)
+        yolo_roi_img(yolo_model, input_folder,roi_folder)
 
         # ==================== U-net模型预测，获得边界 =================== #
         roi_imgs = os.listdir(roi_folder)

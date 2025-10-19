@@ -217,14 +217,6 @@ def process_dicom_to_frames(dicom_path, output_folder):
         os.makedirs(output_folder, exist_ok=True)
         convert_dicom_to_jpg(dicom_path, output_folder)
 
-        # # 假设输出文件夹是 frames_20250828_114157
-        # source_folder = output_folder
-        # target_folder = 'static/images'
-
-        # os.makedirs(target_folder, exist_ok=True)
-        # for file in os.listdir(source_folder):
-        #     if file.endswith('.jpg'):
-        #         shutil.copy(os.path.join(source_folder, file), target_folder)
         return True
     except Exception as e:
         print(f"转换失败: {e}")
