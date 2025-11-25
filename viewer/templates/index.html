@@ -8,13 +8,15 @@
 <body>
     <!-- 导航栏 -->
     <nav>
-        <a href="#" class="menu-button">导入文件</a>
-        <a href="#" class="menu-button">信息视图</a>
-        <a href="#" class="menu-button">单帧测量</a>
-        <a href="#" class="menu-button">批量测量</a>
-        <a href="#" class="menu-button">清除标记</a>
-        <a href="#" class="menu-button">导出报告</a>
-        <a href="#" class="menu-button">帮助</a>
+        <a href="#" id="import-btn" class="menu-button">导入文件</a>
+        <a href="#" id="info-btn" class="menu-button">信息视图</a>
+        <a href="#" id="single-measure-btn" class="menu-button">单帧测量</a>
+        <a href="#" id="batch-measure-btn" class="menu-button">批量测量</a>
+        <a href="#" id="clear-btn" class="menu-button">清除标记</a>
+        <a href="#" id="export-btn" class="menu-button">导出报告</a>
+        <a href="#" id="help-btn" class="menu-button">帮助</a>
+        <a href="#" id="sort-btn" class="menu-button">排序</a>
+        <a href="#" id="manual-measure-btn" class="menu-button">手动测量</a>
     </nav>
 
     <div class="container">
@@ -41,10 +43,10 @@
 
             <!-- 控制按钮 -->
             <div class="controls">
-                <button class="menu-button">上一帧</button>
-                <button class="menu-button">播放/暂停</button>
-                <button class="menu-button">下一帧</button>
-                <button class="menu-button">开始测量</button>
+                <button id="prev-frame-btn" class="menu-button">上一帧</button>
+                <button id="play-pause-btn" class="menu-button">播放/暂停</button>
+                <button id="next-frame-btn" class="menu-button">下一帧</button>
+                <button id="start-measure-btn" class="menu-button">开始测量</button>
             </div>
 
             <!-- 测量结果叠加层 -->

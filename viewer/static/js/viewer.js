@@ -5,6 +5,8 @@ class MedicalImageViewer {
         this.currentFrame = 0;        // 当前帧号
         this.isPlaying = false;       // 播放状态
         this.measurementMode = false; // 测量模式开关
+        this.clickPoints = [];        // 存储显示点
+        this.measurementPoints = [];  // 存储测量点
         this.pixelSpacing = null;     // 像素间距
         this.unit = null;             // 单位
         this.currentBoxes = null; // 保存当前边界框数据
@@ -592,6 +594,8 @@ class MedicalImageViewer {
             const y1 = box.y1 * scaleY + offsetY;
             const x2 = box.x2 * scaleX + offsetX;
             const y2 = box.y2 * scaleY + offsetY;
+            console.log(`原图边界框: (${box.x1}, ${box.y1}) - (${box.x2}, ${box.y2})`);
+            console.log(`显示边界框: (${x1}, ${y1}) - (${x2}, ${y2})`);
             
             // 创建边界框元素
             const boxElement = document.createElement('div');
@@ -627,10 +631,256 @@ class MedicalImageViewer {
         const overlay = document.getElementById('measurement-overlay');
         overlay.innerHTML = '';
     }
+
+    //--------------------------------手动测量功能------------------------------------
+    // 开始测量模式
+    startManualMeasurement() {
+        this.measurementMode = true;
+        this.measurementPoints = [];
+        this.clickPoints = []
+        
+        // // 清除之前的测量标记
+        // this.clearMeasurements();
+        
+        // 添加提示信息
+        alert('已进入测量模式，请在图像上点击两个点进行测量');
+    }
+
+    // 处理图像点击事件
+    handleImageClick(event) {
+        if (!this.measurementMode) return;
+        
+        const imageDisplay = document.getElementById('image-display');
+        const overlay = document.getElementById('measurement-overlay');
+        
+        // 获取图像和覆盖层的位置信息
+        const imageRect = imageDisplay.getBoundingClientRect();
+        const overlayRect = overlay.getBoundingClientRect();
+        
+        // 计算点击位置相对于覆盖层的坐标
+        const x = event.clientX - overlayRect.left;
+        const y = event.clientY - overlayRect.top;
+        
+        // 计算图像在覆盖层中的位置
+        const imageX = imageRect.left - overlayRect.left;
+        const imageY = imageRect.top - overlayRect.top;
+        
+        // 调整坐标为相对于图像的坐标
+        const relativeX = x - imageX;
+        const relativeY = y - imageY;
+        
+        // 确保点击位置在图像范围内
+        if (relativeX < 0 || relativeX > imageRect.width || relativeY < 0 || relativeY > imageRect.height) {
+            console.log('点击位置超出图像范围');
+            return;
+        }
+        
+        console.log(`点击位置相对于覆盖层的坐标: (${x.toFixed(2)}, ${y.toFixed(2)})`);
+        console.log(`图像在覆盖层中位置: (${imageX.toFixed(2)}, ${imageY.toFixed(2)})`);
+        console.log(`点击位置相对于图像坐标: (${relativeX.toFixed(2)}, ${relativeY.toFixed(2)})`);
+        console.log(`图像尺寸: ${imageRect.width} x ${imageRect.height}`);
+        
+        // 保存点击点（相对于图像的坐标）
+        this.measurementPoints.push({ 
+            x: relativeX, 
+            y: relativeY 
+        });
+
+        // 保存点击点（显示坐标）
+        this.clickPoints.push({ 
+            x: x, 
+            y: y 
+        });
+
+        // 在图像上标记点击点（使用相对于覆盖层的坐标）
+        this.markPoint(x, y, this.measurementPoints.length);
+        
+        // 当有两个点时，计算距离
+        if (this.measurementPoints.length === 2) {
+            this.calculateAndDisplayDistance();
+            // 退出测量模式
+            this.measurementMode = false;
+        }
+    }
+
+    // 标记点击点
+    markPoint(x, y, pointNumber) {
+        const overlay = document.getElementById('measurement-overlay');
+        
+        // 创建点标记元素（直接使用相对于覆盖层的坐标）
+        const pointElement = document.createElement('div');
+        pointElement.style.position = 'absolute';
+        pointElement.style.left = `${x - 3}px`;  // 减去半径使点居中
+        pointElement.style.top = `${y - 3}px`;   // 减去半径使点居中
+        pointElement.style.width = '6px';
+        pointElement.style.height = '6px';
+        pointElement.style.backgroundColor = 'red';
+        pointElement.style.borderRadius = '50%';
+        pointElement.style.zIndex = '20';
+        pointElement.style.pointerEvents = 'none';
+        
+        // 添加点编号
+        const label = document.createElement('div');
+        label.style.position = 'absolute';
+        label.style.left = '10px';
+        label.style.top = '-20px';
+        label.style.color = 'white';
+        label.style.backgroundColor = 'rgba(0,0,0,0.7)';
+        label.style.padding = '2px 4px';
+        label.style.fontSize = '12px';
+        label.textContent = pointNumber;
+        
+        pointElement.appendChild(label);
+        overlay.appendChild(pointElement);
+        
+        console.log(`标记点 ${pointNumber}: 鼠标点击的位置 (${x.toFixed(2)}, ${y.toFixed(2)})`);
+    }
+    // 计算并显示距离
+    calculateAndDisplayDistance() {
+        if (this.measurementPoints.length < 2) return;
+        
+        const point1 = this.measurementPoints[0];
+        const point2 = this.measurementPoints[1];
+        
+        console.log(`计算距离: 点1(${point1.x.toFixed(2)}, ${point1.y.toFixed(2)}) 到 点2(${point2.x.toFixed(2)}, ${point2.y.toFixed(2)})`);
+        
+        // 获取图像相关信息用于坐标映射
+        const imageDisplay = document.getElementById('image-display');
+        const naturalWidth = imageDisplay.naturalWidth;
+        const naturalHeight = imageDisplay.naturalHeight;
+        const displayedWidth = imageDisplay.clientWidth;
+        const displayedHeight = imageDisplay.clientHeight;
+        
+        console.log(`图像信息: 原始尺寸(${naturalWidth}, ${naturalHeight}) 显示尺寸(${displayedWidth}, ${displayedHeight})`);
+        
+        // 计算坐标缩放比例
+        const scaleX = naturalWidth / displayedWidth;
+        const scaleY = naturalHeight / displayedHeight;
+        
+        // 将显示坐标转换为原始图像坐标
+        const originalX1 = point1.x * scaleX;
+        const originalY1 = point1.y * scaleY;
+        const originalX2 = point2.x * scaleX;
+        const originalY2 = point2.y * scaleY;
+        
+        console.log(`对应原始图像坐标: 点1(${originalX1.toFixed(2)}, ${originalY1.toFixed(2)}) 点2(${originalX2.toFixed(2)}, ${originalY2.toFixed(2)})`);
+        
+        // 计算像素距离
+        const pixelDistance = Math.sqrt(
+            Math.pow(originalX2 - originalX1, 2) + 
+            Math.pow(originalY2 - originalY1, 2)
+        );
+        
+        // 计算实际距离（如果有像素间距信息）
+        let realDistance = null;
+        if (this.pixelSpacing) {
+            realDistance = pixelDistance * this.pixelSpacing;
+        }
+        
+        // 在图像上绘制连线
+        this.drawMeasurementLine();
+        
+        // 显示测量结果
+        this.displayManualMeasurementResult(pixelDistance, realDistance);
+    }
+
+    // 绘制测量线
+    drawMeasurementLine() {
+        const point1 = this.clickPoints[0];
+        const point2 = this.clickPoints[1];
+        const overlay = document.getElementById('measurement-overlay');
+        
+        // 创建 SVG 元素来绘制线段
+        const svgNS = "http://www.w3.org/2000/svg";
+        const svg = document.createElementNS(svgNS, "svg");
+        
+        // 设置 SVG 容器大小和位置
+        const minX = Math.min(point1.x, point2.x);
+        const minY = Math.min(point1.y, point2.y);
+        const maxX = Math.max(point1.x, point2.x);
+        const maxY = Math.max(point1.y, point2.y);
+        
+        svg.style.position = 'absolute';
+        svg.style.left = `${minX - 2}px`;
+        svg.style.top = `${minY - 2}px`;
+        svg.setAttribute('width', maxX - minX + 4);
+        svg.setAttribute('height', maxY - minY + 4);
+        svg.style.zIndex = '15';
+        svg.style.pointerEvents = 'none';
+        
+        // 创建线段元素
+        const line = document.createElementNS(svgNS, "line");
+        line.setAttribute('x1', point1.x - minX + 2);
+        line.setAttribute('y1', point1.y - minY + 2);
+        line.setAttribute('x2', point2.x - minX + 2);
+        line.setAttribute('y2', point2.y - minY + 2);
+        line.setAttribute('stroke', 'red');
+        line.setAttribute('stroke-width', '2');
+        
+        svg.appendChild(line);
+        overlay.appendChild(svg);
+    }
+
+    // 显示手动测量结果
+    displayManualMeasurementResult(pixelDistance, realDistance) {
+        const overlay = document.getElementById('measurement-overlay');
+        
+        // 查找距离标签并更新文本
+        const lineElement = overlay.lastChild;
+        if (lineElement && lineElement.children.length > 0) {
+            const distanceLabel = lineElement.firstChild;
+            let text = `距离: ${pixelDistance.toFixed(2)} 像素`;
+            if (realDistance !== null) {
+                text += ` (${realDistance.toFixed(2)} mm)`;
+            }
+            distanceLabel.textContent = text;
+        }
+        
+        // 显示完整结果在控制台
+        console.log(`测量结果:`);
+        console.log(`像素距离: ${pixelDistance.toFixed(2)} pixels`);
+        if (realDistance !== null) {
+            console.log(`实际距离: ${realDistance.toFixed(2)} mm`);
+        }
+        
+        // 将测量结果显示在像素位置信息栏
+        const pixelSpacingInfo = document.getElementById('pixel-spacing-info');
+        if (pixelSpacingInfo) {
+            // 清除之前的手动测量结果
+            const existingResult = pixelSpacingInfo.querySelector('.manual-measurement-result');
+            if (existingResult) {
+                existingResult.remove();
+            }
+            
+            // 创建新的测量结果显示元素
+            const resultElement = document.createElement('span');
+            resultElement.className = 'manual-measurement-result';
+            resultElement.style.marginLeft = '20px';
+            resultElement.style.color = '#1976d2';
+            resultElement.style.fontWeight = 'bold';
+            
+            if (realDistance !== null) {
+                resultElement.textContent = `手动测量结果：${realDistance.toFixed(2)} mm (${pixelDistance.toFixed(2)} 像素)`;
+            } else {
+                resultElement.textContent = `手动测量结果：${pixelDistance.toFixed(2)} 像素`;
+            }
+            
+            pixelSpacingInfo.appendChild(resultElement);
+        }
+        
+        // 显示在页面上的弹窗通知
+        alert(`测量完成:\n像素距离: ${pixelDistance.toFixed(2)} 像素${realDistance !== null ? `\n实际距离: ${realDistance.toFixed(2)} mm` : ''}`);
+    }
 }
 
 // 初始化查看器
 const viewer = new MedicalImageViewer();
+
+// 添加图像点击事件监听器
+const imageDisplay = document.getElementById('image-display');
+imageDisplay.addEventListener('click', (event) => {
+    viewer.handleImageClick(event);
+});
 
 // 绑定事件
 // 文件列表点击文件名加载对应文件
@@ -642,20 +892,21 @@ document.querySelectorAll('.file-item').forEach(item => {
 });
 
 // 绑定按钮事件
-document.querySelector('.menu-button:nth-child(1)').onclick = () => viewer.importFile();//导入文件
-document.querySelector('.menu-button:nth-child(2)').onclick = () => viewer.showInfo();
-document.querySelector('.menu-button:nth-child(3)').onclick = () => viewer.startMeasurement();//单帧测量
-document.querySelector('.menu-button:nth-child(4)').onclick = () => viewer.autoBatchMeasure(); //批量测量
-document.querySelector('.menu-button:nth-child(5)').onclick = () => viewer.clearMeasurements();
-document.querySelector('.menu-button:nth-child(6)').onclick = () => viewer.exportReport();
-document.querySelector('.menu-button:nth-child(7)').onclick = () => viewer.showHelp();
-document.querySelector('.menu-button:nth-child(8)').onclick = () => viewer.sortByScore();
+document.getElementById('import-btn').onclick = () => viewer.importFile();//导入文件
+document.getElementById('info-btn').onclick = () => viewer.showInfo();
+document.getElementById('single-measure-btn').onclick = () => viewer.startMeasurement();//单帧测量
+document.getElementById('batch-measure-btn').onclick = () => viewer.autoBatchMeasure();//批量测量
+document.getElementById('clear-btn').onclick = () => viewer.clearMeasurements();
+document.getElementById('export-btn').onclick = () => viewer.exportReport();
+document.getElementById('help-btn').onclick = () => viewer.showHelp();
+document.getElementById('sort-btn').onclick = () => viewer.sortByScore();
+document.getElementById('manual-measure-btn').onclick = () => viewer.startManualMeasurement();
 
-// 控制按钮事件
-document.querySelector('.menu-button:nth-child(1)').onclick = () => viewer.prevFrame();
-document.querySelector('.menu-button:nth-child(2)').onclick = () => viewer.playPause();
-document.querySelector('.menu-button:nth-child(3)').onclick = () => viewer.nextFrame();
-// document.querySelector('.menu-button:nth-child(4)').onclick = () => viewer.manualMeasure();
+// 控制按钮事件绑定
+document.getElementById('prev-frame-btn').onclick = () => viewer.prevFrame();
+document.getElementById('play-pause-btn').onclick = () => viewer.playPause();
+document.getElementById('next-frame-btn').onclick = () => viewer.nextFrame();
+// document.getElementById('start-measure-btn').onclick = () => viewer.manualMeasure();
 
 // 缩放控制
 document.getElementById('zoom-control').addEventListener('input', function() {
