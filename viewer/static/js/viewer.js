@@ -15,6 +15,9 @@ class MedicalImageViewer {
         const imageDisplay = document.getElementById('image-display');
         imageDisplay.src = `images/${fileName}.jpg`;
         
+        // 更新显示的帧名称
+        this.updateCurrentFrameName(`${fileName}.jpg`);
+        
         // 更新文件列表高亮
         document.querySelectorAll('.file-item').forEach(item => {
             item.style.backgroundColor = '';
@@ -109,6 +112,14 @@ class MedicalImageViewer {
         this.loadFrame(this.currentFrame);
     }
 
+    //更新帧名称显示
+    updateCurrentFrameName(frameName) {
+        const frameNameElement = document.getElementById('current-frame-name');
+        if (frameNameElement) {
+            frameNameElement.textContent = frameName || '无';
+        }
+    }
+
     // 加载特定帧
     loadFrame(frameName) {
         const imageDisplay = document.getElementById('image-display');
@@ -117,10 +128,20 @@ class MedicalImageViewer {
         // 更新当前文件状态
         this.currentFile = frameName.replace('.jpg', '');
         
+        // 更新显示的帧名称
+        this.updateCurrentFrameName(frameName);
+        
         // 清空测量结果
         document.getElementById('measurement-overlay').innerHTML = '';
     }
-
+    // 没有测量结果时能恢复原始标题（暂时没用到
+    resetCandidateFramesTitle() {
+        const rightSidebar = document.querySelector('.right-sidebar');
+        const titleElement = rightSidebar.querySelector('h3');
+        if (titleElement) {
+            titleElement.textContent = '备选帧';
+        }
+    }
     // 导入文件
     importFile() {
         // 实现文件导入逻辑
@@ -247,6 +268,10 @@ class MedicalImageViewer {
                 const urlParts = src.split('/');
                 const fileNameWithExtension = urlParts[urlParts.length - 1];
                 fileName = fileNameWithExtension.replace('.jpg', '');
+                
+                // 更新当前文件状态和显示
+                this.currentFile = fileName;
+                this.updateCurrentFrameName(fileNameWithExtension);
             }
         }
         
@@ -292,12 +317,49 @@ class MedicalImageViewer {
         }
     }
 
-    // 添加显示边界图像的方法
+    // 添加显示边界图像的方法（单帧
     displayContourImages(contours) {
         const candidateFrames = document.getElementById('candidate-frames');
+        // 设置内容区域样式
+        candidateFrames.style.maxHeight = 'calc(100vh - 150px)';
+        candidateFrames.style.overflowY = 'auto';
         candidateFrames.innerHTML = '';
         
+        // 更新备选帧标题，显示边界数量
+        const rightSidebar = document.querySelector('.right-sidebar');
+        const titleElement = rightSidebar.querySelector('h3');
+        if (titleElement) {
+            if (contours && contours.length > 0) {
+                titleElement.textContent = `备选帧 (共 ${contours.length} 个边界)`;
+            } else {
+                titleElement.textContent = '备选帧';
+            }
+        }
+        
         if (contours && contours.length > 0) {
+            // 创建一个容器用于包装所有边界
+            const allContoursContainer = document.createElement('div');
+            allContoursContainer.style.marginBottom = '20px';
+            allContoursContainer.style.border = '1px solid #ddd';
+            allContoursContainer.style.borderRadius = '5px';
+            allContoursContainer.style.padding = '10px';
+            
+            // 添加点击事件，点击时在主区域显示当前帧图像
+            allContoursContainer.style.cursor = 'pointer';
+            // 获取当前显示的帧名称
+            const currentFrameName = this.currentFile + '.jpg';
+            allContoursContainer.addEventListener('click', () => {
+                this.loadFrame(currentFrameName);
+            });
+            
+            const frameTitle = document.createElement('div');
+            frameTitle.textContent = `当前帧: ${this.currentFile}`;
+            frameTitle.style.fontWeight = 'bold';
+            frameTitle.style.marginBottom = '10px';
+            frameTitle.style.fontSize = '14px';
+            
+            allContoursContainer.appendChild(frameTitle);
+            
             contours.forEach((contour, index) => {
                 const container = document.createElement('div');
                 container.style.marginBottom = '15px';
@@ -325,15 +387,31 @@ class MedicalImageViewer {
                 container.appendChild(title);
                 container.appendChild(img);
                 container.appendChild(info);
-                candidateFrames.appendChild(container);
+                allContoursContainer.appendChild(container);
             });
+            
+            candidateFrames.appendChild(allContoursContainer);
         } else {
             candidateFrames.innerHTML = '<div>未检测到血管边界</div>';
         }
     }
+    // 批量测量
     displayAllContourImages(contours) {
         const candidateFrames = document.getElementById('candidate-frames');
-        candidateFrames.innerHTML = '';
+        // 设置内容区域样式
+        candidateFrames.style.maxHeight = 'calc(100vh - 150px)';
+        candidateFrames.style.overflowY = 'auto';
+        
+        // 更新备选帧标题，显示边界数量
+        const rightSidebar = document.querySelector('.right-sidebar');
+        const titleElement = rightSidebar.querySelector('h3');
+        if (titleElement) {
+            if (contours && contours.length > 0) {
+                titleElement.textContent = `备选帧 (共 ${contours.length} 个边界)`;
+            } else {
+                titleElement.textContent = '备选帧';
+            }
+        }
         
         if (contours && contours.length > 0) {
             // 按帧分组
@@ -352,6 +430,12 @@ class MedicalImageViewer {
                 frameContainer.style.border = '1px solid #ddd';
                 frameContainer.style.borderRadius = '5px';
                 frameContainer.style.padding = '10px';
+                
+                // 添加点击事件，点击时在主区域显示对应的完整帧图像
+                frameContainer.style.cursor = 'pointer';
+                frameContainer.addEventListener('click', () => {
+                    this.loadFrame(frameName);
+                });
                 
                 const frameTitle = document.createElement('div');
                 frameTitle.textContent = `帧: ${frameName.replace('.jpg', '')}`;
@@ -382,11 +466,12 @@ class MedicalImageViewer {
                     img.style.border = '1px solid #eee';
                     
                     // 计算实际直径（如果有像素间距信息）
-                    let diameterInfo = `直径: ${contour.diameter.toFixed(2)} 像素`;
+                    let diameterInfo = `直径: `;
                     if (this.pixelSpacing) {
                         const diameterInMM = contour.diameter * this.pixelSpacing;
-                        diameterInfo += ` (${diameterInMM.toFixed(2)} mm)`;
+                        diameterInfo += `${diameterInMM.toFixed(2)} mm `;
                     }
+                    diameterInfo += `(${contour.diameter.toFixed(2)} 像素)`
                     
                     const info = document.createElement('div');
                     info.innerHTML = `

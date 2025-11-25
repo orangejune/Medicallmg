@@ -206,7 +206,6 @@ def predict_and_get_contour(image_path,save_folder=None,img_name=None):
     else:
         return None, None, None
 
-# 在 process_dicom_to_frames 函数中添加像素距离计算
 def process_dicom_to_frames(dicom_path, output_folder):
     """
     处理 DICOM 文件为图像帧

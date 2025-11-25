@@ -36,6 +36,10 @@ nav {
     background-color: #f0f0f0;
     padding: 10px;
     box-sizing: border-box;
+    /* 添加垂直滚动条 */
+    overflow-y: auto;
+    /* 保持水平不滚动 */
+    overflow-x: hidden;
 }
 
 .main-content {
@@ -55,6 +59,10 @@ nav {
     background-color: #f9f9f9;
     padding: 10px;
     box-sizing: border-box;
+    /* 添加垂直滚动条 */
+    overflow-y: auto;
+    /* 保持水平不滚动 */
+    overflow-x: hidden;
 }
 
 .file-item {

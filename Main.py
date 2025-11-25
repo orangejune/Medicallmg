@@ -206,27 +206,12 @@ def predict_and_get_contour(image_path,save_folder=None,img_name=None):
     else:
         return None, None, None
 
-def process_dicom_to_frames(dicom_path, output_folder):
-    """
-    处理 DICOM 文件为图像帧
-    :param dicom_path: 输入的 DICOM 文件路径
-    :param output_folder: 输出图像帧的文件夹
-    :return: 成功与否
-    """
-    try:
-        os.makedirs(output_folder, exist_ok=True)
-        convert_dicom_to_jpg(dicom_path, output_folder)
-
-        return True
-    except Exception as e:
-        print(f"转换失败: {e}")
-        return False
     
 if __name__ == "__main__":
 
     # Folder paths (modify as needed)
     script_full_path = os.path.abspath(__file__)
-    data_path = os.path.join(os.path.dirname(__file__),'data3')
+    data_path = os.path.join(os.path.dirname(__file__),'data4')
     # media_names = [i.split('.')[0] for i in os.listdir(data_path) if i.endswith('avi')]
     file_names = ['P8SCBO02']
     # media_names = ['Image196_type1-a','Image377_type3a']
@@ -248,15 +233,15 @@ if __name__ == "__main__":
         #     os.makedirs(input_folder, exist_ok=True)
         #     extract_frames(video_path, input_folder, frame_interval=1)
 
-        # if not os.path.isdir(input_folder) or not os.listdir(input_folder):
-        #     os.makedirs(input_folder, exist_ok=True)
-        #     convert_dicom_to_jpg(file_path, input_folder)
+        if not os.path.isdir(input_folder) or not os.listdir(input_folder):
+            os.makedirs(input_folder, exist_ok=True)
+            convert_dicom_to_jpg(file_path, input_folder)
 
         # ====================== 获取dicom像素距离 ======================== #
         pixel_spacing,_ = get_corrected_pixel_spacing(file_path)
 
         # ==================== YOLO模型预测，获得ROI图片 =================== #
-        # yolo_roi_img(yolo_model, input_folder,roi_folder)
+        yolo_roi_img(yolo_model, input_folder,roi_folder)
 
         # ==================== U-net模型预测，获得边界 =================== #
         roi_imgs = os.listdir(roi_folder)

@@ -225,8 +225,6 @@ def batch_measure():
                             contour_save_path = os.path.join('viewer/static/contours', f'contour_{frame_name}')
                             os.makedirs(os.path.dirname(contour_save_path), exist_ok=True)
                             
-                            # 注意：这里需要修改 processing.py 中的函数调用方式
-                            # 我们将在下一步中添加这个函数
                             result_img, contour, avg_conf = processing.predict_contour_and_save(roi_temp_path, contour_save_path)
                             
                             if contour is not None:
