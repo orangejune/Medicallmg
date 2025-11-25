@@ -7,6 +7,35 @@ class MedicalImageViewer {
         this.measurementMode = false; // 测量模式开关
         this.pixelSpacing = null;     // 像素间距
         this.unit = null;             // 单位
+        this.currentBoxes = null; // 保存当前边界框数据
+        
+        // 初始化响应式支持
+        this.initResponsiveSupport();
+    }
+
+    // 初始化响应式支持，使得绘制的元素位置大小正确
+    initResponsiveSupport() {
+        // 使用 ResizeObserver 监听图像大小变化（现代浏览器）
+        const imageDisplay = document.getElementById('image-display');
+        if (window.ResizeObserver && imageDisplay) {
+            this.resizeObserver = new ResizeObserver(entries => {
+                for (let entry of entries) {
+                    if (entry.target === imageDisplay && this.currentBoxes) {
+                        this.drawBoundingBoxes(this.currentBoxes);
+                    }
+                }
+            });
+            this.resizeObserver.observe(imageDisplay);
+        } else {
+            // 回退到监听窗口大小变化（兼容旧浏览器）
+            window.addEventListener('resize', () => {
+                if (this.currentBoxes) {
+                    setTimeout(() => {
+                        this.drawBoundingBoxes(this.currentBoxes);
+                    }, 100);
+                }
+            });
+        }
     }
 
     // 加载文件
@@ -28,8 +57,8 @@ class MedicalImageViewer {
         document.getElementById('measurement-overlay').innerHTML = '';
     }
 
-    // 手动测量
-    manualMeasure() {
+    // 批量测量
+    autoBatchMeasure() {
         const overlay = document.getElementById('measurement-overlay');
         if (this.measurementMode) {
             overlay.innerHTML = '';
@@ -306,7 +335,7 @@ class MedicalImageViewer {
                     // 显示测量结果
                     this.displayMeasurementResults(data.contours);
                     
-                    alert('测量完成，已在图像上标注ROI区域，边界图像显示在备选帧区域');
+                    // alert('测量完成，已在图像上标注ROI区域，边界图像显示在备选帧区域');
                 });
             } else {
                 alert('测量失败: ' + data.error);
@@ -375,14 +404,23 @@ class MedicalImageViewer {
                 img.src = contour.contour_image;
                 img.style.width = '100%';
                 img.style.height = 'auto';
+                img.style.border = '1px solid #eee';
+
+                // 计算实际直径（如果有像素间距信息）
+                let diameterInfo = `直径: `;
+                if (this.pixelSpacing) {
+                    const diameterInMM = contour.diameter * this.pixelSpacing;
+                    diameterInfo += `${diameterInMM.toFixed(2)} mm `;
+                }
+                diameterInfo += `(${contour.diameter.toFixed(2)} 像素)`
                 
                 const info = document.createElement('div');
                 info.innerHTML = `
-                    <div>置信度: ${contour.confidence.toFixed(2)}</div>
-                    <div>直径: ${contour.diameter.toFixed(2)} 像素</div>
+                    <div style="font-size: 11px; margin-top: 5px;">
+                        <div>置信度: ${contour.confidence.toFixed(2)}</div>
+                        <div>${diameterInfo}</div>
+                    </div>
                 `;
-                info.style.fontSize = '12px';
-                info.style.marginTop = '5px';
                 
                 container.appendChild(title);
                 container.appendChild(img);
@@ -515,38 +553,53 @@ class MedicalImageViewer {
         console.log(resultText);
     }
 
-    // 绘制边界框
+    // 绘制边界框（使用坐标映射方法）
     drawBoundingBoxes(boxes) {
+        // 保存当前边界框数据以便重新绘制
+        this.currentBoxes = boxes;
+        
         const overlay = document.getElementById('measurement-overlay');
         overlay.innerHTML = '';
         
-        // 获取显示图像的元素和尺寸
         const imageDisplay = document.getElementById('image-display');
-        const displayedWidth = imageDisplay.offsetWidth;
-        const displayedHeight = imageDisplay.offsetHeight;
         
-        // 获取图像的自然尺寸（原始尺寸）
+        if (!imageDisplay.complete || imageDisplay.naturalWidth === 0) {
+            console.warn('图像尚未加载完成，无法准确绘制边界框');
+            return;
+        }
+        
+        // 获取图像容器的相关信息
+        const container = imageDisplay.parentElement;
+        const containerRect = container.getBoundingClientRect();
+        const imageRect = imageDisplay.getBoundingClientRect();
+        
+        // 计算图像在容器中的偏移量
+        const offsetX = imageRect.left - containerRect.left;
+        const offsetY = imageRect.top - containerRect.top;
+        
         const naturalWidth = imageDisplay.naturalWidth;
         const naturalHeight = imageDisplay.naturalHeight;
+        const displayedWidth = imageRect.width;
+        const displayedHeight = imageRect.height;
         
         // 计算缩放比例
         const scaleX = displayedWidth / naturalWidth;
         const scaleY = displayedHeight / naturalHeight;
         
         boxes.forEach(box => {
-            // 将原始坐标转换为显示坐标
-            const displayX1 = box.x1 * scaleX;
-            const displayY1 = box.y1 * scaleY;
-            const displayX2 = box.x2 * scaleX;
-            const displayY2 = box.y2 * scaleY;
+            // 将原始坐标转换为相对于容器的坐标
+            const x1 = box.x1 * scaleX + offsetX;
+            const y1 = box.y1 * scaleY + offsetY;
+            const x2 = box.x2 * scaleX + offsetX;
+            const y2 = box.y2 * scaleY + offsetY;
             
             // 创建边界框元素
             const boxElement = document.createElement('div');
             boxElement.style.position = 'absolute';
-            boxElement.style.left = `${displayX1}px`;
-            boxElement.style.top = `${displayY1}px`;
-            boxElement.style.width = `${displayX2 - displayX1}px`;
-            boxElement.style.height = `${displayY2 - displayY1}px`;
+            boxElement.style.left = `${x1}px`;
+            boxElement.style.top = `${y1}px`;
+            boxElement.style.width = `${x2 - x1}px`;
+            boxElement.style.height = `${y2 - y1}px`;
             boxElement.style.border = '2px solid yellow';
             boxElement.style.boxSizing = 'border-box';
             boxElement.style.pointerEvents = 'none';
@@ -589,10 +642,10 @@ document.querySelectorAll('.file-item').forEach(item => {
 });
 
 // 绑定按钮事件
-document.querySelector('.menu-button:nth-child(1)').onclick = () => viewer.importFile();
+document.querySelector('.menu-button:nth-child(1)').onclick = () => viewer.importFile();//导入文件
 document.querySelector('.menu-button:nth-child(2)').onclick = () => viewer.showInfo();
-document.querySelector('.menu-button:nth-child(3)').onclick = () => viewer.startMeasurement();
-document.querySelector('.menu-button:nth-child(4)').onclick = () => viewer.manualMeasure(); //批量测量
+document.querySelector('.menu-button:nth-child(3)').onclick = () => viewer.startMeasurement();//单帧测量
+document.querySelector('.menu-button:nth-child(4)').onclick = () => viewer.autoBatchMeasure(); //批量测量
 document.querySelector('.menu-button:nth-child(5)').onclick = () => viewer.clearMeasurements();
 document.querySelector('.menu-button:nth-child(6)').onclick = () => viewer.exportReport();
 document.querySelector('.menu-button:nth-child(7)').onclick = () => viewer.showHelp();
@@ -602,7 +655,7 @@ document.querySelector('.menu-button:nth-child(8)').onclick = () => viewer.sortB
 document.querySelector('.menu-button:nth-child(1)').onclick = () => viewer.prevFrame();
 document.querySelector('.menu-button:nth-child(2)').onclick = () => viewer.playPause();
 document.querySelector('.menu-button:nth-child(3)').onclick = () => viewer.nextFrame();
-document.querySelector('.menu-button:nth-child(4)').onclick = () => viewer.manualMeasure();
+// document.querySelector('.menu-button:nth-child(4)').onclick = () => viewer.manualMeasure();
 
 // 缩放控制
 document.getElementById('zoom-control').addEventListener('input', function() {
