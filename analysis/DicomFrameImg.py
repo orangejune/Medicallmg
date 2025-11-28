@@ -36,7 +36,7 @@ def convert_dicom_to_jpg(dicom_file_path, output_dir):
 
     if hasattr(ds, 'NumberOfFrames') and ds.NumberOfFrames > 1:
         print(f"这是一个多帧文件，包含 {ds.NumberOfFrames} 帧。")
-        frames = ds.pixel_array
+        frames = ds.pixel_array # 解码压缩的图像数据，用时长
         print(f"原始数据形状: {frames.shape}")
 
         # 获取尺寸
@@ -45,8 +45,6 @@ def convert_dicom_to_jpg(dicom_file_path, output_dir):
         # 2. 处理并保存每一帧为JPG
         for i in tqdm(range(num_frames)):
             frame_data = frames[i]
-            
-            
 
             # 使用归一化处理
             normalized_frame = cv2.normalize(frame_data, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)

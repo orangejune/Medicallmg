@@ -403,7 +403,7 @@ class MedicalImageViewer {
                 title.style.marginBottom = '5px';
                 
                 const img = document.createElement('img');
-                img.src = contour.contour_image;
+                img.src = contour.max_diameter_image_path;
                 img.style.width = '100%';
                 img.style.height = 'auto';
                 img.style.border = '1px solid #eee';
@@ -411,10 +411,10 @@ class MedicalImageViewer {
                 // 计算实际直径（如果有像素间距信息）
                 let diameterInfo = `直径: `;
                 if (this.pixelSpacing) {
-                    const diameterInMM = contour.diameter * this.pixelSpacing;
+                    const diameterInMM = contour.max_diameter_in_pixel * this.pixelSpacing;
                     diameterInfo += `${diameterInMM.toFixed(2)} mm `;
                 }
-                diameterInfo += `(${contour.diameter.toFixed(2)} 像素)`
+                diameterInfo += `(${contour.max_diameter_in_pixel.toFixed(2)} 像素)`
                 
                 const info = document.createElement('div');
                 info.innerHTML = `
@@ -500,7 +500,7 @@ class MedicalImageViewer {
                     title.style.fontSize = '12px';
                     
                     const img = document.createElement('img');
-                    img.src = contour.contour_image;
+                    img.src = contour.max_diameter_image_path;
                     img.style.width = '100%';
                     img.style.height = 'auto';
                     img.style.border = '1px solid #eee';
@@ -508,10 +508,10 @@ class MedicalImageViewer {
                     // 计算实际直径（如果有像素间距信息）
                     let diameterInfo = `直径: `;
                     if (this.pixelSpacing) {
-                        const diameterInMM = contour.diameter * this.pixelSpacing;
+                        const diameterInMM = contour.max_diameter_in_pixel * this.pixelSpacing;
                         diameterInfo += `${diameterInMM.toFixed(2)} mm `;
                     }
-                    diameterInfo += `(${contour.diameter.toFixed(2)} 像素)`
+                    diameterInfo += `(${contour.max_diameter_in_pixel.toFixed(2)} 像素)`
                     
                     const info = document.createElement('div');
                     info.innerHTML = `
@@ -540,9 +540,9 @@ class MedicalImageViewer {
         
         if (contours && contours.length > 0) {
             contours.forEach((contour, index) => {
-                resultText += `边界 ${index + 1}: 直径 ${contour.diameter.toFixed(2)} 像素`;
+                resultText += `边界 ${index + 1}: 直径 ${contour.max_diameter_in_pixel.toFixed(2)} 像素`;
                 if (this.pixelSpacing) {
-                    const diameterInMM = contour.diameter * this.pixelSpacing;
+                    const diameterInMM = contour.max_diameter_in_pixel * this.pixelSpacing;
                     resultText += ` (${diameterInMM.toFixed(2)} mm)`;
                 }
                 resultText += '\n';
@@ -902,10 +902,10 @@ document.getElementById('help-btn').onclick = () => viewer.showHelp();
 document.getElementById('sort-btn').onclick = () => viewer.sortByScore();
 document.getElementById('manual-measure-btn').onclick = () => viewer.startManualMeasurement();
 
-// 控制按钮事件绑定
-document.getElementById('prev-frame-btn').onclick = () => viewer.prevFrame();
-document.getElementById('play-pause-btn').onclick = () => viewer.playPause();
-document.getElementById('next-frame-btn').onclick = () => viewer.nextFrame();
+// // 控制按钮事件绑定
+// document.getElementById('prev-frame-btn').onclick = () => viewer.prevFrame();
+// document.getElementById('play-pause-btn').onclick = () => viewer.playPause();
+// document.getElementById('next-frame-btn').onclick = () => viewer.nextFrame();
 // document.getElementById('start-measure-btn').onclick = () => viewer.manualMeasure();
 
 // 缩放控制

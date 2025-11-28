@@ -144,16 +144,40 @@ def measure_frame():
                         contour_save_path = os.path.join('viewer/static/contours', f'contour_{frame_name}')
                         os.makedirs(os.path.dirname(contour_save_path), exist_ok=True)
                         
-                        result_img, contour, avg_conf = processing.predict_contour_and_save(roi_temp_path, contour_save_path)
+                        result_img, contour, avg_conf, largest_lumen_mask = processing.predict_contour_and_save(roi_temp_path, contour_save_path)
                         
                         if contour is not None:
-                            # 计算直径（示例值，实际应根据像素间距计算）
-                            diameter = np.sqrt(cv2.contourArea(contour) / np.pi) * 2
+                            # 计算最大直径并生成可视化图片
+                            max_diameter_value_in_pixel = 0
+                            max_diameter_image_path = None
+                            
+                            try:
+                                # 创建用于最大直径可视化的保存路径
+                                max_diameter_save_path = os.path.join('viewer/static/results', f'max_diameter_contour_{frame_name}')
+                                os.makedirs(os.path.dirname(max_diameter_save_path), exist_ok=True)
+                                
+                                # 创建二值掩码用于计算最大直径
+                                lumen_binary_mask = np.zeros_like(roi[:, :, 0])  # 假设roi是彩色图像
+                                cv2.drawContours(lumen_binary_mask, [contour], -1, 255, cv2.FILLED)
+                                
+                                # 计算最大直径
+                                max_diameter_value_in_pixel = processing.find_and_visualize_max_diameter_improved(
+                                    largest_lumen_mask,
+                                    contour_save_path,
+                                    max_diameter_save_path
+                                )
+                                
+                                # 设置返回的图片路径
+                                max_diameter_image_path = f'/static/results/max_diameter_contour_{frame_name}'
+                            except Exception as e:
+                                print(f"计算最大直径时出错: {e}")
                             
                             contour_info.append({
                                 'contour_image': f'/static/contours/contour_{frame_name}',
+                                'max_diameter_image_path': max_diameter_image_path,
                                 'confidence': float(avg_conf),
-                                'diameter': float(diameter),
+                                'max_diameter_in_pixel': float(max_diameter_value_in_pixel),
+                                'max_diameter_image': max_diameter_image_path,
                                 'box': {
                                     'x1': x1,
                                     'y1': y1,
@@ -225,17 +249,41 @@ def batch_measure():
                             contour_save_path = os.path.join('viewer/static/contours', f'contour_{frame_name}')
                             os.makedirs(os.path.dirname(contour_save_path), exist_ok=True)
                             
-                            result_img, contour, avg_conf = processing.predict_contour_and_save(roi_temp_path, contour_save_path)
+                            result_img, contour, avg_conf, largest_lumen_mask = processing.predict_contour_and_save(roi_temp_path, contour_save_path)
                             
                             if contour is not None:
-                                # 计算直径（示例值，实际应根据像素间距计算）
-                                diameter = np.sqrt(cv2.contourArea(contour) / np.pi) * 2
+                                # 计算最大直径并生成可视化图片
+                                max_diameter_value_in_pixel = 0
+                                max_diameter_image_path = None
                                 
+                                try:
+                                    # 创建用于最大直径可视化的保存路径
+                                    max_diameter_save_path = os.path.join('viewer/static/results', f'max_diameter_contour_{frame_name}')
+                                    os.makedirs(os.path.dirname(max_diameter_save_path), exist_ok=True)
+                                    
+                                    # 创建二值掩码用于计算最大直径
+                                    lumen_binary_mask = np.zeros_like(roi[:, :, 0])  # 假设roi是彩色图像
+                                    cv2.drawContours(lumen_binary_mask, [contour], -1, 255, cv2.FILLED)
+                                    
+                                    # 计算最大直径
+                                    max_diameter_value_in_pixel = processing.find_and_visualize_max_diameter_improved(
+                                        largest_lumen_mask,
+                                        contour_save_path,
+                                        max_diameter_save_path
+                                    )
+                                    
+                                    # 设置返回的图片路径
+                                    max_diameter_image_path = f'/static/results/max_diameter_contour_{frame_name}'
+                                except Exception as e:
+                                    print(f"计算最大直径时出错: {e}")
+
                                 frame_contours.append({
                                     'frame_name': frame_name,
                                     'contour_image': f'/static/contours/contour_{frame_name}',
+                                    'max_diameter_image_path': max_diameter_image_path,
                                     'confidence': float(avg_conf),
-                                    'diameter': float(diameter),
+                                    'max_diameter_in_pixel': float(max_diameter_value_in_pixel),
+                                    'max_diameter_image': max_diameter_image_path,
                                     'box': {
                                         'x1': x1,
                                         'y1': y1,

@@ -13,7 +13,7 @@ from albumentations.pytorch import ToTensorV2
 import segmentation_models_pytorch as smp
 import albumentations as A
 from tqdm import tqdm
-from analysis.Analysis_D import calculate_average_diameter, find_and_visualize_max_diameter, find_and_visualize_max_diameter_improved
+from analysis.Analysis_D import calculate_average_diameter, find_and_visualize_max_diameter
 from analysis.Analysis_DistanceRatio import cal_distance_ratio
 import torch.nn.functional as F
 # 不弹出窗口,除非show()
@@ -23,6 +23,7 @@ from analysis.score import score_vessel_boundary
 from analysis.DicomFrameImg import convert_dicom_to_jpg
 from analysis.DicomRatio import get_corrected_pixel_spacing
 import shutil
+from skimage.morphology import skeletonize
 """
 打分：yolo训练后的置信度/骨架评分
 """
@@ -233,7 +234,7 @@ def predict_contour_and_save(image_path, save_path):
     # 加载和预处理图像
     original_img = cv2.imread(image_path)
     if original_img is None:
-        return None, None, None
+        return None, None, None, None
         
     gray_img = cv2.cvtColor(original_img, cv2.COLOR_BGR2GRAY)
     transformed = transform(image=gray_img)
@@ -254,19 +255,23 @@ def predict_contour_and_save(image_path, save_path):
                                   interpolation=cv2.INTER_NEAREST)
 
     # 提取血管腔轮廓
-    lumen_binary_mask = np.zeros_like(pred_mask_resized)
-    lumen_binary_mask[pred_mask_resized == LUMEN_CLASS_ID] = 255
+    largest_contour_mask = np.zeros_like(pred_mask_resized)
+    largest_contour_mask[pred_mask_resized == LUMEN_CLASS_ID] = 255
     
     # 查找轮廓
-    all_contours, _ = cv2.findContours(lumen_binary_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    all_contours, _ = cv2.findContours(largest_contour_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     if not all_contours:
-        return None, None, None
+        return None, None, None, None
 
     # 找到最大的轮廓
     largest_contour = max(all_contours, key=cv2.contourArea)
     if cv2.contourArea(largest_contour) < 500:
-        return None, None, None
+        return None, None, None, None
+
+    # 创建血管区域mask
+    largest_lumen_mask= np.zeros_like(largest_contour_mask)
+    cv2.drawContours(largest_lumen_mask, [largest_contour], -1, 255, cv2.FILLED)
 
     # 在原图上绘制轮廓
     result_img = original_img.copy()
@@ -286,7 +291,81 @@ def predict_contour_and_save(image_path, save_path):
     
     avg_confidence = np.mean(contour_pixels_confidence) if len(contour_pixels_confidence) > 0 else 0
     
-    return result_img, largest_contour, avg_confidence
+    return result_img, largest_contour, avg_confidence, largest_lumen_mask
+
+def find_and_visualize_max_diameter_improved(binary_mask, original_image_path, save_path):
+    """
+    计算血管的最大内径，并对比两种计算方法。
+    方法1: max_radius * 2
+    方法2: 计算绘制出的直径线段的实际长度 (更精确)
+    """
+    original_image = cv2.imread(original_image_path)
+    if original_image is None:
+        print(f"错误: 无法读取原始图像 {original_image_path}")
+        return None
+    
+    binary_mask_bool = binary_mask > 0
+    dist_transform = cv2.distanceTransform(binary_mask, cv2.DIST_L2, 5)
+    skeleton = skeletonize(binary_mask_bool)
+    
+    radii = dist_transform[skeleton]
+    if len(radii) == 0:
+        print("未在掩码中找到骨架。")
+        return None
+
+    max_radius = np.max(radii)
+    
+    # --- 方法1：简单乘以2 (原始方法) ---
+    max_diameter_simple = max_radius * 2
+    
+    # --- 定位与方向计算 (与原代码相同) ---
+    max_radius_idx = np.argmax(radii)
+    skeleton_coords = np.argwhere(skeleton)
+    center_y, center_x = skeleton_coords[max_radius_idx]
+    center_point = (center_x, center_y)
+
+    half_win = 15
+    y_start, y_end = max(0, center_y - half_win), min(skeleton.shape[0], center_y + half_win)
+    x_start, x_end = max(0, center_x - half_win), min(skeleton.shape[1], center_x + half_win)
+    
+    local_skeleton_patch = skeleton[y_start:y_end, x_start:x_end]
+    local_coords = np.argwhere(local_skeleton_patch)
+    
+    if len(local_coords) < 2:
+        tangent_vector = np.array([1.0, 0.0]) # 默认水平方向
+    else:
+        # 将局部坐标转换回全局坐标
+        local_coords = local_coords.astype(np.float32)
+        local_coords[:, 0] += y_start
+        local_coords[:, 1] += x_start
+        mean, eigenvectors = cv2.PCACompute(local_coords[:, ::-1], mean=None)
+        tangent_vector = eigenvectors[0]
+
+    normal_vector = np.array([-tangent_vector[1], tangent_vector[0]])
+    
+    # 计算端点 p1 和 p2
+    # 注意：这里我们先用浮点数计算，最后再取整用于绘图
+    p1_float = center_point + max_radius * normal_vector
+    p2_float = center_point - max_radius * normal_vector
+
+    # --- 方法2：计算线段 (p1, p2) 的欧氏距离 (您的提议，更精确) ---
+    max_diameter_line = np.linalg.norm(p1_float - p2_float)
+
+    # --- 可视化 ---
+    p1_int = tuple(p1_float.astype(int))
+    p2_int = tuple(p2_float.astype(int))
+    
+    cv2.line(original_image, p1_int, p2_int, (0, 255, 255), 2)
+    cv2.circle(original_image, center_point, 3, (0, 255, 0), -1)
+
+    cv2.imwrite(save_path, original_image)
+
+    print("--- 直径计算结果对比 ---")
+    print(f"方法1 (简单乘以2): {max_diameter_simple:.4f} 像素")
+    print(f"方法2 (计算线段长度): {max_diameter_line:.4f} 像素")
+
+    # 返回更精确的值
+    return max_diameter_line
     
 if __name__ == "__main__":
 
@@ -330,7 +409,9 @@ if __name__ == "__main__":
         for img_name in tqdm(roi_imgs):
             ori_img = os.path.join(input_folder,img_name)
             roi_path = os.path.join(roi_folder,img_name)
-            lumen_binary_mask, contour, final_score = predict_and_get_contour(roi_path,contour_folder,img_name)
+            save_path = os.path.join(contour_folder,img_name)
+            # lumen_binary_mask, contour, final_score = predict_and_get_contour(roi_path,contour_folder,img_name)
+            result_img, contour, final_score, largest_lumen_mask = predict_contour_and_save(roi_path, save_path)
 
             # ==================== 处理边界 =================== #
             
@@ -342,8 +423,9 @@ if __name__ == "__main__":
                     img_name = img_name.split('.')[0]
                     avg_save_path = f'{result_folder}/{img_name}_avg.jpg'
                     max_save_path = f'{result_folder}/{img_name}_max.jpg'
-                    average_diameter_in_mm = calculate_average_diameter(lumen_binary_mask, pixel_spacing, avg_save_path)
-                    max_diameter_in_mm = find_and_visualize_max_diameter_improved(lumen_binary_mask,roi_path, pixel_spacing, max_save_path) # 最大距离和位置不太准，待优化
+                    average_diameter_in_mm = calculate_average_diameter(largest_lumen_mask, pixel_spacing, avg_save_path)
+                    max_diameter_in_pixel = find_and_visualize_max_diameter_improved(largest_lumen_mask,result_img, max_save_path) # 最大距离和位置不太准，待优化
+                    max_diameter_in_mm = max_diameter_in_pixel*pixel_spacing
                     # pixel_spacing = cal_distance_ratio(ori_img)
                     # print(pixel_spacing)
                     print(f'像素间距为：{pixel_spacing:.2f}')
