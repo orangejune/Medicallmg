@@ -60,7 +60,8 @@ scoring_weights = {
     'continuity': 0.15,  # 边界是否连续
     'smoothness': 0.40,  # 边界是否平滑无锯齿
     'tubularity': 0.35,  # 形态需要清晰
-    'simplicity': 0.10   # 分割需要干净
+    'simplicity': 0.10,   # 分割需要干净
+    'area': 0.50,  # 血管腔较为完整（面积大）
 }
 
 def yolo_roi_img(yolo_model,prediction_images_dir,crops_output_dir,prediction_output_dir=None):
@@ -265,6 +266,8 @@ def predict_contour_and_save(image_path, save_path):
         return None, None, None, None
 
     # 找到最大的轮廓
+    score_result = score_vessel_boundary(largest_contour_mask, scoring_weights)
+    final_score = score_result['final_score']
     largest_contour = max(all_contours, key=cv2.contourArea)
     if cv2.contourArea(largest_contour) < 500:
         return None, None, None, None
@@ -291,7 +294,7 @@ def predict_contour_and_save(image_path, save_path):
     
     avg_confidence = np.mean(contour_pixels_confidence) if len(contour_pixels_confidence) > 0 else 0
     
-    return result_img, largest_contour, avg_confidence, largest_lumen_mask
+    return result_img, largest_contour, final_score, largest_lumen_mask
 
 def find_and_visualize_max_diameter_improved(binary_mask, original_image_path, save_path):
     """
@@ -361,8 +364,7 @@ def find_and_visualize_max_diameter_improved(binary_mask, original_image_path, s
     cv2.imwrite(save_path, original_image)
 
     print("--- 直径计算结果对比 ---")
-    print(f"方法1 (简单乘以2): {max_diameter_simple:.4f} 像素")
-    print(f"方法2 (计算线段长度): {max_diameter_line:.4f} 像素")
+    print(f"{max_diameter_line:.4f} 像素")
 
     # 返回更精确的值
     return max_diameter_line

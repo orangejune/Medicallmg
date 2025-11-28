@@ -122,8 +122,8 @@ def score_vessel_boundary(binary_mask, weights, smoothness_epsilon=0.005):
 
     Args:
         binary_mask (np.ndarray): 血管腔的二值掩码 (dtype=np.uint8, 值为 0 或 255)。
-        weights (dict): 四个评分标准的权重。
-                        e.g., {'continuity': 0.2, 'smoothness': 0.4, 'tubularity': 0.3, 'simplicity': 0.1}
+        weights (dict): 五个评分标准的权重。
+                        e.g., {'continuity': 0.2, 'smoothness': 0.3, 'tubularity': 0.2, 'simplicity': 0.1, 'area': 0.2}
         smoothness_epsilon (float): 用于轮廓近似的精度参数，值越小要求越平滑。
 
     Returns:
@@ -145,8 +145,14 @@ def score_vessel_boundary(binary_mask, weights, smoothness_epsilon=0.005):
     largest_contour = max(all_contours, key=cv2.contourArea)
     main_object_mask = np.zeros_like(binary_mask)
     cv2.drawContours(main_object_mask, [largest_contour], -1, 255, cv2.FILLED)
+    
+    # --- 新增：2. 面积评分 (Area Score) ---
+    # 计算最大轮廓的面积并标准化到图像总面积
+    largest_area = cv2.contourArea(largest_contour)
+    total_area = binary_mask.shape[0] * binary_mask.shape[1]
+    score_area = largest_area / total_area
 
-    # --- 2. 平滑度评分 (Smoothness Score) ---
+    # --- 3. 平滑度评分 (Smoothness Score) ---
     # 使用多边形近似来衡量平滑度。平滑的曲线可以用更少的顶点来近似。
     arc_length = cv2.arcLength(largest_contour, True)
     # epsilon 决定了近似的精度
@@ -161,7 +167,7 @@ def score_vessel_boundary(binary_mask, weights, smoothness_epsilon=0.005):
     score_smoothness = 1.0 - (approx_points / (original_points + 1e-6))
     score_smoothness = max(0, score_smoothness) # 确保不为负
 
-    # --- 3. 管状形态/平行度评分 (Tubularity/Parallelism Score) ---
+    # --- 4. 管状形态/平行度评分 (Tubularity/Parallelism Score) ---
     dist_transform = cv2.distanceTransform(main_object_mask, cv2.DIST_L2, 5)
     
     skeleton = skeletonize(main_object_mask / 255)
@@ -178,7 +184,7 @@ def score_vessel_boundary(binary_mask, weights, smoothness_epsilon=0.005):
             # CV越小，管壁越平行，得分越高
             score_tubularity = max(0, 1 - coeff_variation)
 
-    # --- 4. 形态复杂度评分 (Simplicity Score) ---
+    # --- 5. 形态复杂度评分 (Simplicity Score) ---
     skeleton_img = (skeleton * 255).astype(np.uint8)
     score_simplicity = 0.5 # 默认分
     total_nodes = 'N/A'
@@ -193,11 +199,12 @@ def score_vessel_boundary(binary_mask, weights, smoothness_epsilon=0.005):
         node_density = num_branchpoints / skeleton_pixels
         score_simplicity = max(0, 1 - node_density * 10) # 乘以10放大密度效应
 
-    # --- 5. 计算最终综合得分 ---
+    # --- 6. 计算最终综合得分 ---
     final_score = (weights['continuity'] * score_continuity +
                    weights['smoothness'] * score_smoothness +
                    weights['tubularity'] * score_tubularity +
-                   weights['simplicity'] * score_simplicity)
+                   weights['simplicity'] * score_simplicity +
+                   weights['area'] * score_area)
 
     return {
         "final_score": final_score,
@@ -205,13 +212,15 @@ def score_vessel_boundary(binary_mask, weights, smoothness_epsilon=0.005):
             "continuity": score_continuity,
             "smoothness": score_smoothness,
             "tubularity": score_tubularity,
-            "simplicity": score_simplicity
+            "simplicity": score_simplicity,
+            "area": score_area  # 返回新的评分项
         },
         "details": {
             "contour_count": len(all_contours),
             "smoothness_approx_pts_ratio": f"{approx_points}/{original_points}",
             "tubularity_cv": coeff_variation,
-            "simplicity_branch_points": num_branchpoints if 'num_branchpoints' in locals() else 'N/A'
+            "simplicity_branch_points": num_branchpoints if 'num_branchpoints' in locals() else 'N/A',
+            "largest_area_ratio": score_area  # 添加面积比例详情
         }
     }
 

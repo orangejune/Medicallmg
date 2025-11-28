@@ -73,42 +73,46 @@ class MedicalImageViewer {
     }
 
     async batchMeasure() {
-    try {
-        // 获取所有帧文件名
-        const fileList = document.getElementById('file-list');
-        const frameItems = fileList.querySelectorAll('.file-item');
-        const frameNames = Array.from(frameItems).map(item => item.getAttribute('data-file') + '.jpg');
-        
-        if (frameNames.length === 0) {
-            alert('没有可测量的帧');
-            return;
+        try {
+            // 获取所有帧文件名
+            const fileList = document.getElementById('file-list');
+            const frameItems = fileList.querySelectorAll('.file-item');
+            const frameNames = Array.from(frameItems).map(item => item.getAttribute('data-file') + '.jpg');
+            
+            if (frameNames.length === 0) {
+                alert('没有可测量的帧');
+                return;
+            }
+            
+            // 在开始批量测量前清空右侧结果
+            const candidateFrames = document.getElementById('candidate-frames');
+            candidateFrames.innerHTML = '';
+            
+            // 发送批量测量请求
+            const response = await fetch('/batch-measure', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    frame_names: frameNames
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                // 在备选帧区域显示所有边界图像和测量结果
+                this.displayAllContourImages(data.contours);
+                alert(`批量测量完成，共处理了 ${data.contours.length} 个边界`);
+            } else {
+                alert('批量测量失败: ' + data.error);
+            }
+        } catch (error) {
+            console.error('批量测量过程中发生错误:', error);
+            alert('批量测量过程中发生错误，请查看控制台了解详情');
         }
-        
-        // 发送批量测量请求
-        const response = await fetch('/batch-measure', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                frame_names: frameNames
-            })
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            // 在备选帧区域显示所有边界图像和测量结果
-            this.displayAllContourImages(data.contours);
-            alert(`批量测量完成，共处理了 ${data.contours.length} 个边界`);
-        } else {
-            alert('批量测量失败: ' + data.error);
-        }
-    } catch (error) {
-        console.error('批量测量过程中发生错误:', error);
-        alert('批量测量过程中发生错误，请查看控制台了解详情');
     }
-}
     // 播放/暂停
     playPause() {
         this.isPlaying = !this.isPlaying;
@@ -283,12 +287,6 @@ class MedicalImageViewer {
         alert('导出测量结果报告');
     }
 
-    // 排序功能
-    sortByScore() {
-        // 实现按打分质量排序逻辑
-        alert('按打分质量排序');
-    }
-
     // 帮助功能
     showHelp() {
         // 实现帮助功能
@@ -331,6 +329,10 @@ class MedicalImageViewer {
             alert('请先选择一个文件');
             return;
         }
+        
+        // 在开始测量前清空右侧结果
+        const candidateFrames = document.getElementById('candidate-frames');
+        candidateFrames.innerHTML = '';
         
         try {
             // 发送请求到后端进行测量
@@ -375,7 +377,6 @@ class MedicalImageViewer {
         // 设置内容区域样式
         candidateFrames.style.maxHeight = 'calc(100vh - 150px)';
         candidateFrames.style.overflowY = 'auto';
-        candidateFrames.innerHTML = '';
         
         // 更新备选帧标题，显示边界数量
         const rightSidebar = document.querySelector('.right-sidebar');
@@ -412,6 +413,9 @@ class MedicalImageViewer {
             
             allContoursContainer.appendChild(frameTitle);
             
+            // 按评分从高到低排序
+            contours.sort((a, b) => b.score - a.score);
+            
             contours.forEach((contour, index) => {
                 const container = document.createElement('div');
                 container.style.marginBottom = '15px';
@@ -419,7 +423,7 @@ class MedicalImageViewer {
                 container.style.padding = '10px';
                 
                 const title = document.createElement('div');
-                title.textContent = `边界 ${index + 1}`;
+                title.textContent = `边界 ${index + 1} (评分: ${contour.score.toFixed(3)})`;
                 title.style.fontWeight = 'bold';
                 title.style.marginBottom = '5px';
                 
@@ -440,7 +444,7 @@ class MedicalImageViewer {
                 const info = document.createElement('div');
                 info.innerHTML = `
                     <div style="font-size: 11px; margin-top: 5px;">
-                        <div>置信度: ${contour.confidence.toFixed(2)}</div>
+                        
                         <div>${diameterInfo}</div>
                     </div>
                 `;
@@ -456,7 +460,7 @@ class MedicalImageViewer {
             candidateFrames.innerHTML = '<div>未检测到血管边界</div>';
         }
     }
-    // 批量测量
+    // 批量测量,按评分排序
     displayAllContourImages(contours) {
         const candidateFrames = document.getElementById('candidate-frames');
         // 设置内容区域样式
@@ -475,6 +479,9 @@ class MedicalImageViewer {
         }
         
         if (contours && contours.length > 0) {
+            // 按照评分从高到低排序
+            contours.sort((a, b) => b.score - a.score);
+            
             // 按帧分组
             const groupedContours = {};
             contours.forEach(contour => {
@@ -506,7 +513,8 @@ class MedicalImageViewer {
                 
                 frameContainer.appendChild(frameTitle);
                 
-                // 显示该帧的所有边界
+                // 显示该帧的所有边界，按评分排序
+                groupedContours[frameName].sort((a, b) => b.score - a.score);
                 groupedContours[frameName].forEach((contour, index) => {
                     const container = document.createElement('div');
                     container.style.marginBottom = '15px';
@@ -515,7 +523,7 @@ class MedicalImageViewer {
                     container.style.backgroundColor = '#f9f9f9';
                     
                     const title = document.createElement('div');
-                    title.textContent = `血管 ${index + 1}`;
+                    title.textContent = `血管 ${index + 1} (评分: ${contour.score.toFixed(3)})`;
                     title.style.fontWeight = 'bold';
                     title.style.marginBottom = '5px';
                     title.style.fontSize = '12px';
@@ -537,7 +545,7 @@ class MedicalImageViewer {
                     const info = document.createElement('div');
                     info.innerHTML = `
                         <div style="font-size: 11px; margin-top: 5px;">
-                            <div>置信度: ${contour.confidence.toFixed(2)}</div>
+                            
                             <div>${diameterInfo}</div>
                         </div>
                     `;
@@ -917,11 +925,10 @@ document.getElementById('import-btn').onclick = () => viewer.importFile();//导�
 document.getElementById('info-btn').onclick = () => viewer.showInfo();
 document.getElementById('single-measure-btn').onclick = () => viewer.startMeasurement();//单帧测量
 document.getElementById('batch-measure-btn').onclick = () => viewer.autoBatchMeasure();//批量测量
+document.getElementById('manual-measure-btn').onclick = () => viewer.startManualMeasurement();//手动测量
 document.getElementById('clear-btn').onclick = () => viewer.clearMeasurements();
 document.getElementById('export-btn').onclick = () => viewer.exportReport();
 document.getElementById('help-btn').onclick = () => viewer.showHelp();
-document.getElementById('sort-btn').onclick = () => viewer.sortByScore();
-document.getElementById('manual-measure-btn').onclick = () => viewer.startManualMeasurement();
 
 // // 控制按钮事件绑定
 // document.getElementById('prev-frame-btn').onclick = () => viewer.prevFrame();

@@ -169,7 +169,7 @@ def measure_frame():
                         contour_save_path = os.path.join('viewer/static/contours', f'contour_{frame_name}')
                         os.makedirs(os.path.dirname(contour_save_path), exist_ok=True)
                         
-                        result_img, contour, avg_conf, largest_lumen_mask = processing.predict_contour_and_save(roi_temp_path, contour_save_path)
+                        result_img, contour, final_score, largest_lumen_mask = processing.predict_contour_and_save(roi_temp_path, contour_save_path)
                         
                         if contour is not None:
                             # 计算最大直径并生成可视化图片
@@ -200,7 +200,7 @@ def measure_frame():
                             contour_info.append({
                                 'contour_image': f'/static/contours/contour_{frame_name}',
                                 'max_diameter_image_path': max_diameter_image_path,
-                                'confidence': float(avg_conf),
+                                'score': float(final_score),
                                 'max_diameter_in_pixel': float(max_diameter_value_in_pixel),
                                 'max_diameter_image': max_diameter_image_path,
                                 'box': {
@@ -274,7 +274,7 @@ def batch_measure():
                             contour_save_path = os.path.join('viewer/static/contours', f'contour_{frame_name}')
                             os.makedirs(os.path.dirname(contour_save_path), exist_ok=True)
                             
-                            result_img, contour, avg_conf, largest_lumen_mask = processing.predict_contour_and_save(roi_temp_path, contour_save_path)
+                            result_img, contour, final_score, largest_lumen_mask = processing.predict_contour_and_save(roi_temp_path, contour_save_path)
                             
                             if contour is not None:
                                 # 计算最大直径并生成可视化图片
@@ -306,7 +306,7 @@ def batch_measure():
                                     'frame_name': frame_name,
                                     'contour_image': f'/static/contours/contour_{frame_name}',
                                     'max_diameter_image_path': max_diameter_image_path,
-                                    'confidence': float(avg_conf),
+                                    'score': float(final_score),
                                     'max_diameter_in_pixel': float(max_diameter_value_in_pixel),
                                     'max_diameter_image': max_diameter_image_path,
                                     'box': {
