@@ -175,6 +175,27 @@ class MedicalImageViewer {
     }
     // 导入文件
     importFile() {
+        // 清空文件列表
+        const fileList = document.getElementById('file-list');
+        fileList.innerHTML = "";
+        
+        // 清空候选帧显示
+        const candidateFrames = document.getElementById('candidate-frames');
+        candidateFrames.innerHTML = '';
+        
+        // 重置图像显示
+        const imageDisplay = document.getElementById('image-display');
+        imageDisplay.src = '';
+        
+        // 清空测量覆盖层
+        this.clearMeasurements();
+        
+        // 重置其他状态
+        this.currentFile = null;
+        this.currentFrame = 0;
+        this.currentBoxes = null;
+        this.resetCandidateFramesTitle();
+        
         // 实现文件导入逻辑
         const input = document.createElement('input');
         input.type = 'file';

@@ -25,9 +25,34 @@ app.config['TEMPLATES_AUTO_RELOAD'] = True
 def index():
     return render_template('index.html')
 
+def clear_static_directories():
+    """
+    清空viewer/static目录下的临时文件和结果文件
+    """
+    directories_to_clear = [
+        'viewer/static/images',
+        'viewer/static/temp',
+        'viewer/static/contours',
+        'viewer/static/results'
+    ]
+    
+    for directory in directories_to_clear:
+        if os.path.exists(directory):
+            # 删除目录中的所有文件
+            for filename in os.listdir(directory):
+                file_path = os.path.join(directory, filename)
+                try:
+                    if os.path.isfile(file_path):
+                        os.unlink(file_path)
+                except Exception as e:
+                    print(f"无法删除文件 {file_path}: {e}")
+
 @app.route('/process-dicom', methods=['POST'])
 def process_dicom():
     try:
+        # 在处理新文件前清空静态目录
+        clear_static_directories()
+
         file = request.files['file']
         if not file:
             return jsonify({'error': '未上传文件'}), 400
