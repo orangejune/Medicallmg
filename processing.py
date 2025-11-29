@@ -305,7 +305,7 @@ def find_and_visualize_max_diameter_improved(binary_mask, original_image_path, s
     original_image = cv2.imread(original_image_path)
     if original_image is None:
         print(f"错误: 无法读取原始图像 {original_image_path}")
-        return None
+        return None, None, None
     
     binary_mask_bool = binary_mask > 0
     dist_transform = cv2.distanceTransform(binary_mask, cv2.DIST_L2, 5)
@@ -314,7 +314,7 @@ def find_and_visualize_max_diameter_improved(binary_mask, original_image_path, s
     radii = dist_transform[skeleton]
     if len(radii) == 0:
         print("未在掩码中找到骨架。")
-        return None
+        return None, None, None
 
     max_radius = np.max(radii)
     
@@ -366,8 +366,8 @@ def find_and_visualize_max_diameter_improved(binary_mask, original_image_path, s
     print("--- 直径计算结果对比 ---")
     print(f"{max_diameter_line:.4f} 像素")
 
-    # 返回更精确的值
-    return max_diameter_line
+    # 返回更精确的值和端点坐标（确保是Python原生类型）
+    return float(max_diameter_line), [int(p1_int[0]), int(p1_int[1])], [int(p2_int[0]), int(p2_int[1])]
     
 if __name__ == "__main__":
 

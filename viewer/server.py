@@ -13,6 +13,7 @@ import albumentations as A
 from albumentations.pytorch import ToTensorV2
 import torch.nn.functional as F
 import segmentation_models_pytorch as smp
+import json
 
 
 # 添加当前项目路径到 Python 路径
@@ -175,6 +176,8 @@ def measure_frame():
                             # 计算最大直径并生成可视化图片
                             max_diameter_value_in_pixel = 0
                             max_diameter_image_path = None
+                            p1_int = [0, 0]
+                            p2_int = [0, 0]
                             
                             try:
                                 # 创建用于最大直径可视化的保存路径
@@ -186,7 +189,7 @@ def measure_frame():
                                 cv2.drawContours(lumen_binary_mask, [contour], -1, 255, cv2.FILLED)
                                 
                                 # 计算最大直径
-                                max_diameter_value_in_pixel = processing.find_and_visualize_max_diameter_improved(
+                                max_diameter_value_in_pixel, p1_int, p2_int = processing.find_and_visualize_max_diameter_improved(
                                     largest_lumen_mask,
                                     contour_save_path,
                                     max_diameter_save_path
@@ -197,19 +200,37 @@ def measure_frame():
                             except Exception as e:
                                 print(f"计算最大直径时出错: {e}")
                             
-                            contour_info.append({
+                            # 保存测量结果为JSON文件
+                            measurement_data = {
                                 'contour_image': f'/static/contours/contour_{frame_name}',
                                 'max_diameter_image_path': max_diameter_image_path,
                                 'score': float(final_score),
                                 'max_diameter_in_pixel': float(max_diameter_value_in_pixel),
                                 'max_diameter_image': max_diameter_image_path,
                                 'box': {
-                                    'x1': x1,
-                                    'y1': y1,
-                                    'x2': x2,
-                                    'y2': y2
+                                    'x1': float(x1),
+                                    'y1': float(y1),
+                                    'x2': float(x2),
+                                    'y2': float(y2)
+                                },
+                                'line_points': {
+                                    'p1': {
+                                        'x': int(p1_int[0]),
+                                        'y': int(p1_int[1])
+                                    },
+                                    'p2': {
+                                        'x': int(p2_int[0]),
+                                        'y': int(p2_int[1])
+                                    }
                                 }
-                            })
+                            }
+                            
+                            # 保存为JSON文件
+                            json_save_path = os.path.join('viewer/static/results', f'measurement_{frame_name.replace(".jpg", "")}.json')
+                            with open(json_save_path, 'w') as f:
+                                json.dump(measurement_data, f)
+                            
+                            contour_info.append(measurement_data)
         
         return jsonify({
             'success': True,
@@ -280,6 +301,8 @@ def batch_measure():
                                 # 计算最大直径并生成可视化图片
                                 max_diameter_value_in_pixel = 0
                                 max_diameter_image_path = None
+                                p1_int = [0, 0]
+                                p2_int = [0, 0]
                                 
                                 try:
                                     # 创建用于最大直径可视化的保存路径
@@ -291,7 +314,7 @@ def batch_measure():
                                     cv2.drawContours(lumen_binary_mask, [contour], -1, 255, cv2.FILLED)
                                     
                                     # 计算最大直径
-                                    max_diameter_value_in_pixel = processing.find_and_visualize_max_diameter_improved(
+                                    max_diameter_value_in_pixel, p1_int, p2_int = processing.find_and_visualize_max_diameter_improved(
                                         largest_lumen_mask,
                                         contour_save_path,
                                         max_diameter_save_path
@@ -302,7 +325,8 @@ def batch_measure():
                                 except Exception as e:
                                     print(f"计算最大直径时出错: {e}")
 
-                                frame_contours.append({
+                                # 保存测量结果为JSON文件
+                                measurement_data = {
                                     'frame_name': frame_name,
                                     'contour_image': f'/static/contours/contour_{frame_name}',
                                     'max_diameter_image_path': max_diameter_image_path,
@@ -310,12 +334,29 @@ def batch_measure():
                                     'max_diameter_in_pixel': float(max_diameter_value_in_pixel),
                                     'max_diameter_image': max_diameter_image_path,
                                     'box': {
-                                        'x1': x1,
-                                        'y1': y1,
-                                        'x2': x2,
-                                        'y2': y2
+                                        'x1': float(x1),
+                                        'y1': float(y1),
+                                        'x2': float(x2),
+                                        'y2': float(y2)
+                                    },
+                                    'line_points': {
+                                        'p1': {
+                                            'x': int(p1_int[0]),
+                                            'y': int(p1_int[1])
+                                        },
+                                        'p2': {
+                                            'x': int(p2_int[0]),
+                                            'y': int(p2_int[1])
+                                        }
                                     }
-                                })
+                                }
+                                
+                                # 保存为JSON文件
+                                json_save_path = os.path.join('viewer/static/results', f'measurement_{frame_name.replace(".jpg", "")}.json')
+                                with open(json_save_path, 'w') as f:
+                                    json.dump(measurement_data, f)
+                                
+                                frame_contours.append(measurement_data)
             
             all_contours.extend(frame_contours)
         
@@ -324,6 +365,24 @@ def batch_measure():
             'contours': all_contours
         })
         
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    
+@app.route('/get-measurement-result', methods=['GET'])
+def get_measurement_result():
+    try:
+        frame_name = request.args.get('frame_name')
+        if not frame_name:
+            return jsonify({'error': '缺少帧名称'}), 400
+            
+        json_path = os.path.join('viewer/static/results', f'measurement_{frame_name.replace(".jpg", "")}.json')
+        
+        if os.path.exists(json_path):
+            with open(json_path, 'r') as f:
+                measurement_data = json.load(f)
+            return jsonify(measurement_data)
+        else:
+            return jsonify({'error': '未找到测量结果'}), 404
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     

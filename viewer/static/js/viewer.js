@@ -84,9 +84,10 @@ class MedicalImageViewer {
                 return;
             }
             
-            // 在开始批量测量前清空右侧结果
+            // 在开始批量测量前清空右侧结果和中间图像的标记
             const candidateFrames = document.getElementById('candidate-frames');
             candidateFrames.innerHTML = '';
+            this.clearMeasurements();
             
             // 发送批量测量请求
             const response = await fetch('/batch-measure', {
@@ -167,7 +168,12 @@ class MedicalImageViewer {
         this.updateCurrentFrameName(frameName);
         
         // 清空测量结果
-        document.getElementById('measurement-overlay').innerHTML = '';
+        this.clearMeasurements();
+        
+        // 加载并显示测量线（如果存在）
+        setTimeout(() => {
+            this.loadAndDisplayMeasurementLine(frameName);
+        }, 100); // 延迟执行，确保图像开始加载
     }
     // 没有测量结果时能恢复原始标题（暂时没用到
     resetCandidateFramesTitle() {
@@ -330,9 +336,10 @@ class MedicalImageViewer {
             return;
         }
         
-        // 在开始测量前清空右侧结果
+        // 在开始测量前清空右侧结果和中间图像的标记
         const candidateFrames = document.getElementById('candidate-frames');
         candidateFrames.innerHTML = '';
+        this.clearMeasurements();
         
         try {
             // 发送请求到后端进行测量
@@ -359,8 +366,6 @@ class MedicalImageViewer {
                     
                     // 显示测量结果
                     this.displayMeasurementResults(data.contours);
-                    
-                    // alert('测量完成，已在图像上标注ROI区域，边界图像显示在备选帧区域');
                 });
             } else {
                 alert('测量失败: ' + data.error);
@@ -402,6 +407,7 @@ class MedicalImageViewer {
             // 获取当前显示的帧名称
             const currentFrameName = this.currentFile + '.jpg';
             allContoursContainer.addEventListener('click', () => {
+                this.clearMeasurements(); // 点击时先清除标记
                 this.loadFrame(currentFrameName);
             });
             
@@ -502,6 +508,7 @@ class MedicalImageViewer {
                 // 添加点击事件，点击时在主区域显示对应的完整帧图像
                 frameContainer.style.cursor = 'pointer';
                 frameContainer.addEventListener('click', () => {
+                    this.clearMeasurements(); // 点击时先清除标记
                     this.loadFrame(frameName);
                 });
                 
@@ -589,9 +596,10 @@ class MedicalImageViewer {
         // 保存当前边界框数据以便重新绘制
         this.currentBoxes = boxes;
         
-        const overlay = document.getElementById('measurement-overlay');
-        overlay.innerHTML = '';
+        // 清除现有内容
+        this.clearMeasurements();
         
+        const overlay = document.getElementById('measurement-overlay');
         const imageDisplay = document.getElementById('image-display');
         
         if (!imageDisplay.complete || imageDisplay.naturalWidth === 0) {
@@ -658,7 +666,12 @@ class MedicalImageViewer {
     // 清除测量标记
     clearMeasurements() {
         const overlay = document.getElementById('measurement-overlay');
-        overlay.innerHTML = '';
+        if (overlay) {
+            // 移除所有子元素
+            while (overlay.firstChild) {
+                overlay.removeChild(overlay.firstChild);
+            }
+        }
     }
 
     //--------------------------------手动测量功能------------------------------------
@@ -900,6 +913,107 @@ class MedicalImageViewer {
         // 显示在页面上的弹窗通知
         alert(`测量完成:\n像素距离: ${pixelDistance.toFixed(2)} 像素${realDistance !== null ? `\n实际距离: ${realDistance.toFixed(2)} mm` : ''}`);
     }
+    // 点击备选帧后中间图像显示测量结果位置标志
+    async loadAndDisplayMeasurementLine(frameName) {
+        // 先清除现有的标记
+        this.clearMeasurements();
+        
+        try {
+            const response = await fetch(`/get-measurement-result?frame_name=${frameName}`);
+            const data = await response.json();
+            
+            if (!data.error) {
+                // 等待图像加载完成后再绘制
+                this.onImageLoaded(() => {
+                    this.drawMeasurementLineFromData(data);
+                });
+            }
+        } catch (error) {
+            console.log('未找到测量结果或加载失败:', error);
+        }
+    }
+    // 添加加载和显示测量线的方法
+    drawMeasurementLineFromData(measurementData) {
+        // 再次确认清除标记
+        this.clearMeasurements();
+        
+        const overlay = document.getElementById('measurement-overlay');
+        const imageDisplay = document.getElementById('image-display');
+        
+        if (!imageDisplay.complete || imageDisplay.naturalWidth === 0) {
+            console.warn('图像尚未加载完成，无法准确绘制测量线');
+            return;
+        }
+        
+        // 获取图像容器的相关信息
+        const container = imageDisplay.parentElement;
+        const containerRect = container.getBoundingClientRect();
+        const imageRect = imageDisplay.getBoundingClientRect();
+        
+        // 计算图像在容器中的偏移量
+        const offsetX = imageRect.left - containerRect.left;
+        const offsetY = imageRect.top - containerRect.top;
+        
+        const naturalWidth = imageDisplay.naturalWidth;
+        const naturalHeight = imageDisplay.naturalHeight;
+        const displayedWidth = imageRect.width;
+        const displayedHeight = imageRect.height;
+        
+        // 计算缩放比例
+        const scaleX = displayedWidth / naturalWidth;
+        const scaleY = displayedHeight / naturalHeight;
+        
+        // 检查是否存在测量线信息
+        if (measurementData.line_points && measurementData.box) {
+            // 获取ROI边界框在原始图像中的位置
+            const roiX1 = measurementData.box.x1;
+            const roiY1 = measurementData.box.y1;
+            
+            // 将ROI内的点坐标转换为全图坐标
+            const p1_x = roiX1 + measurementData.line_points.p1.x;
+            const p1_y = roiY1 + measurementData.line_points.p1.y;
+            const p2_x = roiX1 + measurementData.line_points.p2.x;
+            const p2_y = roiY1 + measurementData.line_points.p2.y;
+            
+            // 将原始坐标转换为相对于容器的坐标
+            const x1 = p1_x * scaleX + offsetX;
+            const y1 = p1_y * scaleY + offsetY;
+            const x2 = p2_x * scaleX + offsetX;
+            const y2 = p2_y * scaleY + offsetY;
+            
+            // 创建测量线元素
+            const lineElement = document.createElement('div');
+            lineElement.style.position = 'absolute';
+            lineElement.style.left = `${Math.min(x1, x2)}px`;
+            lineElement.style.top = `${Math.min(y1, y2)}px`;
+            lineElement.style.width = `${Math.abs(x2 - x1)}px`;
+            lineElement.style.height = `${Math.abs(y2 - y1)}px`;
+            lineElement.style.pointerEvents = 'none';
+            lineElement.style.zIndex = '11';
+            
+            // 使用SVG绘制线条
+            const svgNS = "http://www.w3.org/2000/svg";
+            const svg = document.createElementNS(svgNS, "svg");
+            svg.setAttribute('width', '100%');
+            svg.setAttribute('height', '100%');
+            svg.style.position = 'absolute';
+            svg.style.top = '0';
+            svg.style.left = '0';
+            
+            const line = document.createElementNS(svgNS, "line");
+            line.setAttribute('x1', x1 < x2 ? 0 : Math.abs(x2 - x1));
+            line.setAttribute('y1', y1 < y2 ? 0 : Math.abs(y2 - y1));
+            line.setAttribute('x2', x1 < x2 ? Math.abs(x2 - x1) : 0);
+            line.setAttribute('y2', y1 < y2 ? Math.abs(y2 - y1) : 0);
+            line.setAttribute('stroke', 'cyan');
+            line.setAttribute('stroke-width', '2');
+            
+            svg.appendChild(line);
+            lineElement.appendChild(svg);
+            overlay.appendChild(lineElement);
+        }
+    }
+
 }
 
 // 初始化查看器
