@@ -105,7 +105,7 @@ class MedicalImageViewer {
             if (data.success) {
                 // 在备选帧区域显示所有边界图像和测量结果
                 this.displayAllContourImages(data.contours);
-                alert(`批量测量完成，共处理了 ${data.contours.length} 个边界`);
+                // alert(`批量测量完成，共处理了 ${data.contours.length} 个边界`);
             } else {
                 alert('批量测量失败: ' + data.error);
             }
@@ -251,7 +251,7 @@ class MedicalImageViewer {
                             this.loadFrame(data.frames[0]);
                         }
 
-                        alert('DICOM 转换成功！已加载帧列表。');
+                        // alert('DICOM 转换成功！已加载帧列表。');
                     } else {
                         alert('转换失败：' + data.error);
                     }
@@ -911,7 +911,7 @@ class MedicalImageViewer {
         }
         
         // 显示在页面上的弹窗通知
-        alert(`测量完成:\n像素距离: ${pixelDistance.toFixed(2)} 像素${realDistance !== null ? `\n实际距离: ${realDistance.toFixed(2)} mm` : ''}`);
+        // alert(`测量完成:\n像素距离: ${pixelDistance.toFixed(2)} 像素${realDistance !== null ? `\n实际距离: ${realDistance.toFixed(2)} mm` : ''}`);
     }
     // 点击备选帧后中间图像显示测量结果位置标志
     async loadAndDisplayMeasurementLine(frameName) {
@@ -1014,6 +1014,383 @@ class MedicalImageViewer {
         }
     }
 
+    //--------------------------------------------ROI框选测量-----------------------------------------
+    // 开始框选测量模式
+    drawRoiMeasurement() {
+        this.measurementMode = 'roi';
+        this.isDrawing = false;
+        this.startPoint = null;
+        
+        // 添加提示信息
+        alert('已进入框选测量模式，请在图像上拖拽绘制矩形区域');
+    }
+
+    // 处理鼠标按下事件
+    handleMouseDown(event) {
+        if (this.measurementMode !== 'roi') return;
+        
+        event.preventDefault();
+        
+        const imageDisplay = document.getElementById('image-display');
+        const overlay = document.getElementById('measurement-overlay');
+        
+        // 获取图像和覆盖层的位置信息
+        const imageRect = imageDisplay.getBoundingClientRect();
+        const overlayRect = overlay.getBoundingClientRect();
+        
+        // 计算点击位置相对于覆盖层的坐标
+        const x = event.clientX - overlayRect.left;
+        const y = event.clientY - overlayRect.top;
+        
+        // 计算图像在覆盖层中的位置
+        const imageX = imageRect.left - overlayRect.left;
+        const imageY = imageRect.top - overlayRect.top;
+        
+        // 调整坐标为相对于图像的坐标
+        const relativeX = x - imageX;
+        const relativeY = y - imageY;
+        
+        // 确保点击位置在图像范围内
+        if (relativeX < 0 || relativeX > imageRect.width || relativeY < 0 || relativeY > imageRect.height) {
+            return;
+        }
+        
+        this.isDrawing = true;
+        this.startPoint = { 
+            x: relativeX, 
+            y: relativeY,
+            displayX: x,
+            displayY: y
+        };
+        
+        // 清除之前的框选框
+        this.clearROIRectangle();
+    }
+
+    // 处理鼠标移动事件
+    handleMouseMove(event) {
+        if (this.measurementMode !== 'roi' || !this.isDrawing || !this.startPoint) return;
+        
+        event.preventDefault();
+        
+        const imageDisplay = document.getElementById('image-display');
+        const overlay = document.getElementById('measurement-overlay');
+        
+        // 获取图像和覆盖层的位置信息
+        const imageRect = imageDisplay.getBoundingClientRect();
+        const overlayRect = overlay.getBoundingClientRect();
+        
+        // 计算当前位置相对于覆盖层的坐标
+        const x = event.clientX - overlayRect.left;
+        const y = event.clientY - overlayRect.top;
+        
+        // 计算图像在覆盖层中的位置
+        const imageX = imageRect.left - overlayRect.left;
+        const imageY = imageRect.top - overlayRect.top;
+        
+        // 调整坐标为相对于图像的坐标
+        const relativeX = x - imageX;
+        const relativeY = y - imageY;
+        
+        // 更新临时框选框（使用显示坐标）
+        this.updateTempRectangle(this.startPoint.displayX, this.startPoint.displayY, x, y);
+    }
+
+    // 处理鼠标释放事件
+    handleMouseUp(event) {
+        if (this.measurementMode !== 'roi' || !this.isDrawing || !this.startPoint) return;
+        
+        event.preventDefault();
+        
+        const imageDisplay = document.getElementById('image-display');
+        const overlay = document.getElementById('measurement-overlay');
+        
+        // 获取图像和覆盖层的位置信息
+        const imageRect = imageDisplay.getBoundingClientRect();
+        const overlayRect = overlay.getBoundingClientRect();
+        const containerRect = imageDisplay.parentElement.getBoundingClientRect();
+        
+        // 计算当前位置相对于覆盖层的坐标
+        const x = event.clientX - overlayRect.left;
+        const y = event.clientY - overlayRect.top;
+        
+        // 计算图像在覆盖层中的位置
+        const imageX = imageRect.left - overlayRect.left;
+        const imageY = imageRect.top - overlayRect.top;
+        
+        // 调整坐标为相对于图像的坐标
+        const relativeX = x - imageX;
+        const relativeY = y - imageY;
+        
+        // 确定矩形框的坐标（相对于图像的坐标）
+        const x1 = Math.min(this.startPoint.x, relativeX);
+        const y1 = Math.min(this.startPoint.y, relativeY);
+        const x2 = Math.max(this.startPoint.x, relativeX);
+        const y2 = Math.max(this.startPoint.y, relativeY);
+        
+        // 确保框选区域有效
+        if (x2 - x1 > 5 && y2 - y1 > 5) {
+            // 创建永久框选框（使用显示坐标）
+            this.createROIRectangle(this.startPoint.displayX, this.startPoint.displayY, x, y);
+            
+            // 执行框选测量（使用相对于图像的坐标进行转换）
+            this.performROIMeasurement(x1, y1, x2, y2);
+        }
+        
+        this.isDrawing = false;
+        this.startPoint = null;
+        
+        // 退出框选模式
+        this.measurementMode = false;
+    }
+
+    // 更新临时框选框
+    updateTempRectangle(x1, y1, x2, y2) {
+        // 清除之前的临时框选框
+        const existingTempRect = document.getElementById('temp-roi-rectangle');
+        if (existingTempRect) {
+            existingTempRect.remove();
+        }
+        
+        const overlay = document.getElementById('measurement-overlay');
+        
+        const rectElement = document.createElement('div');
+        rectElement.id = 'temp-roi-rectangle';
+        rectElement.style.position = 'absolute';
+        rectElement.style.left = `${Math.min(x1, x2)}px`;
+        rectElement.style.top = `${Math.min(y1, y2)}px`;
+        rectElement.style.width = `${Math.abs(x2 - x1)}px`;
+        rectElement.style.height = `${Math.abs(y2 - y1)}px`;
+        rectElement.style.border = '2px dashed blue';
+        rectElement.style.backgroundColor = 'rgba(0, 0, 255, 0.2)';
+        rectElement.style.pointerEvents = 'none';
+        rectElement.style.zIndex = '9';
+        
+        overlay.appendChild(rectElement);
+    }
+
+    // 创建永久框选框
+    createROIRectangle(x1, y1, x2, y2) {
+        // 清除临时框选框
+        const tempRect = document.getElementById('temp-roi-rectangle');
+        if (tempRect) {
+            tempRect.remove();
+        }
+        
+        const overlay = document.getElementById('measurement-overlay');
+        
+        const rectElement = document.createElement('div');
+        rectElement.id = 'roi-rectangle';
+        rectElement.style.position = 'absolute';
+        rectElement.style.left = `${Math.min(x1, x2)}px`;
+        rectElement.style.top = `${Math.min(y1, y2)}px`;
+        rectElement.style.width = `${Math.abs(x2 - x1)}px`;
+        rectElement.style.height = `${Math.abs(y2 - y1)}px`;
+        rectElement.style.border = '2px solid blue';
+        rectElement.style.backgroundColor = 'rgba(0, 0, 255, 0.2)';
+        rectElement.style.pointerEvents = 'none';
+        rectElement.style.zIndex = '9';
+        
+        overlay.appendChild(rectElement);
+    }
+
+    // 清除框选矩形
+    clearROIRectangle() {
+        const tempRect = document.getElementById('temp-roi-rectangle');
+        if (tempRect) {
+            tempRect.remove();
+        }
+        
+        const rect = document.getElementById('roi-rectangle');
+        if (rect) {
+            rect.remove();
+        }
+    }
+
+    // 执行框选测量
+    async performROIMeasurement(x1, y1, x2, y2) {
+        // 检查是否有当前文件
+        let fileName = this.currentFile;
+        
+        if (!fileName) {
+            // 尝试从当前显示的图像中获取文件名
+            const imageDisplay = document.getElementById('image-display');
+            if (imageDisplay && imageDisplay.src) {
+                const src = imageDisplay.src;
+                const urlParts = src.split('/');
+                const fileNameWithExtension = urlParts[urlParts.length - 1];
+                fileName = fileNameWithExtension.replace('.jpg', '');
+                
+                // 更新当前文件状态和显示
+                this.currentFile = fileName;
+                this.updateCurrentFrameName(fileNameWithExtension);
+            }
+        }
+        
+        if (!fileName) {
+            alert('请先选择一个文件');
+            return;
+        }
+        
+        // 获取图像相关信息用于坐标映射
+        const imageDisplay = document.getElementById('image-display');
+        const naturalWidth = imageDisplay.naturalWidth;
+        const naturalHeight = imageDisplay.naturalHeight;
+        const displayedWidth = imageDisplay.clientWidth;
+        const displayedHeight = imageDisplay.clientHeight;
+        
+        // 计算坐标缩放比例
+        const scaleX = naturalWidth / displayedWidth;
+        const scaleY = naturalHeight / displayedHeight;
+        
+        // 将显示坐标转换为原始图像坐标
+        const originalX1 = x1 * scaleX;
+        const originalY1 = y1 * scaleY;
+        const originalX2 = x2 * scaleX;
+        const originalY2 = y2 * scaleY;
+        
+        // 在开始测量前清空右侧结果
+        const candidateFrames = document.getElementById('candidate-frames');
+        candidateFrames.innerHTML = '';
+        
+        try {
+            // 发送请求到后端进行框选测量
+            const response = await fetch('/roi-measure', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    frame_name: fileName + '.jpg',
+                    roi: {
+                        x1: originalX1,
+                        y1: originalY1,
+                        x2: originalX2,
+                        y2: originalY2
+                    }
+                })
+            });
+            
+            // 检查响应是否成功
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('服务器返回错误:', response.status, errorText);
+                alert(`服务器错误 (${response.status}): ${errorText}`);
+                return;
+            }
+            
+            // 尝试解析JSON
+            const data = await response.json();
+            
+            if (data.success) {
+                // 在备选帧区域显示边界图像
+                this.displayROIMeasurementResults(data.contours);
+            } else {
+                alert('框选测量失败: ' + data.error);
+            }
+        } catch (error) {
+            console.error('框选测量过程中发生错误:', error);
+            if (error instanceof SyntaxError) {
+                alert('服务器返回了无效的响应格式。请检查服务器日志了解详细信息。');
+            } else {
+                alert('框选测量过程中发生错误，请查看控制台了解详情');
+            }
+        }
+    }
+
+    // 显示框选测量结果
+    displayROIMeasurementResults(contours) {
+        const candidateFrames = document.getElementById('candidate-frames');
+        // 设置内容区域样式
+        candidateFrames.style.maxHeight = 'calc(100vh - 150px)';
+        candidateFrames.style.overflowY = 'auto';
+        
+        // 更新备选帧标题
+        const rightSidebar = document.querySelector('.right-sidebar');
+        const titleElement = rightSidebar.querySelector('h3');
+        if (titleElement) {
+            if (contours && contours.length > 0) {
+                titleElement.textContent = `框选测量结果 (共 ${contours.length} 个边界)`;
+            } else {
+                titleElement.textContent = '框选测量结果';
+            }
+        }
+        
+        if (contours && contours.length > 0) {
+            // 创建一个容器用于包装所有边界
+            const allContoursContainer = document.createElement('div');
+            allContoursContainer.style.marginBottom = '20px';
+            allContoursContainer.style.border = '1px solid #ddd';
+            allContoursContainer.style.borderRadius = '5px';
+            allContoursContainer.style.padding = '10px';
+            
+            // 添加点击事件，点击时在主区域显示当前帧图像
+            allContoursContainer.style.cursor = 'pointer';
+            // 获取当前显示的帧名称
+            const currentFrameName = this.currentFile + '.jpg';
+            allContoursContainer.addEventListener('click', () => {
+                this.clearMeasurements(); // 点击时先清除标记
+                this.loadFrame(currentFrameName);
+            });
+            
+            const frameTitle = document.createElement('div');
+            frameTitle.textContent = `当前帧: ${this.currentFile} (框选测量)`;
+            frameTitle.style.fontWeight = 'bold';
+            frameTitle.style.marginBottom = '10px';
+            frameTitle.style.fontSize = '14px';
+            
+            allContoursContainer.appendChild(frameTitle);
+            
+            // 按评分从高到低排序
+            contours.sort((a, b) => b.score - a.score);
+            
+            contours.forEach((contour, index) => {
+                const container = document.createElement('div');
+                container.style.marginBottom = '15px';
+                container.style.border = '1px solid #ccc';
+                container.style.padding = '10px';
+                
+                const title = document.createElement('div');
+                title.textContent = `边界 ${index + 1} (评分: ${contour.score.toFixed(3)})`;
+                title.style.fontWeight = 'bold';
+                title.style.marginBottom = '5px';
+                
+                const img = document.createElement('img');
+                // 添加时间戳参数避免浏览器缓存
+                const timestamp = new Date().getTime();
+                img.src = contour.max_diameter_image_path + `?t=${timestamp}`;
+                img.style.width = '100%';
+                img.style.height = 'auto';
+                img.style.border = '1px solid #eee';
+
+                // 计算实际直径（如果有像素间距信息）
+                let diameterInfo = `直径: `;
+                if (this.pixelSpacing) {
+                    const diameterInMM = contour.max_diameter_in_pixel * this.pixelSpacing;
+                    diameterInfo += `${diameterInMM.toFixed(2)} mm `;
+                }
+                diameterInfo += `(${contour.max_diameter_in_pixel.toFixed(2)} 像素)`
+                
+                const info = document.createElement('div');
+                info.innerHTML = `
+                    <div style="font-size: 11px; margin-top: 5px;">
+                        <div>${diameterInfo}</div>
+                    </div>
+                `;
+                
+                container.appendChild(title);
+                container.appendChild(img);
+                container.appendChild(info);
+                allContoursContainer.appendChild(container);
+            });
+            
+            // 清空之前的内容并添加新内容
+            candidateFrames.innerHTML = '';
+            candidateFrames.appendChild(allContoursContainer);
+        } else {
+            candidateFrames.innerHTML = '<div>未检测到血管边界</div>';
+        }
+    }
 }
 
 // 初始化查看器
@@ -1021,8 +1398,50 @@ const viewer = new MedicalImageViewer();
 
 // 添加图像点击事件监听器
 const imageDisplay = document.getElementById('image-display');
+const measurementOverlay = document.getElementById('measurement-overlay');
+
+// ROI 测量的鼠标事件处理
+imageDisplay.addEventListener('mousedown', (event) => {
+    if (viewer.measurementMode === 'roi') {
+        event.preventDefault();
+        viewer.handleMouseDown(event);
+        // 当进入 ROI 模式时，启用覆盖层的鼠标事件
+        measurementOverlay.classList.add('roi-mode');
+    }
+});
+
+measurementOverlay.addEventListener('mousemove', (event) => {
+    if (viewer.measurementMode === 'roi') {
+        event.preventDefault();
+        viewer.handleMouseMove(event);
+    }
+});
+
+measurementOverlay.addEventListener('mouseup', (event) => {
+    if (viewer.measurementMode === 'roi') {
+        event.preventDefault();
+        viewer.handleMouseUp(event);
+        // 当退出 ROI 模式时，禁用覆盖层的鼠标事件
+        measurementOverlay.classList.remove('roi-mode');
+    }
+});
+
+// 防止鼠标在图像外释放时丢失事件
+document.addEventListener('mouseup', (event) => {
+    if (viewer.measurementMode === 'roi' && viewer.isDrawing) {
+        event.preventDefault();
+        viewer.handleMouseUp(event);
+        // 当退出 ROI 模式时，禁用覆盖层的鼠标事件
+        measurementOverlay.classList.remove('roi-mode');
+    }
+});
+
+// 手动测量的点击事件
 imageDisplay.addEventListener('click', (event) => {
-    viewer.handleImageClick(event);
+    // 只有在手动测量模式下才处理点击事件
+    if (viewer.measurementMode === true) {
+        viewer.handleImageClick(event);
+    }
 });
 
 // 绑定事件
@@ -1040,6 +1459,7 @@ document.getElementById('info-btn').onclick = () => viewer.showInfo();
 document.getElementById('single-measure-btn').onclick = () => viewer.startMeasurement();//单帧测量
 document.getElementById('batch-measure-btn').onclick = () => viewer.autoBatchMeasure();//批量测量
 document.getElementById('manual-measure-btn').onclick = () => viewer.startManualMeasurement();//手动测量
+document.getElementById('roi-measure-btn').onclick = () => viewer.drawRoiMeasurement();//框选测量
 document.getElementById('clear-btn').onclick = () => viewer.clearMeasurements();
 document.getElementById('export-btn').onclick = () => viewer.exportReport();
 document.getElementById('help-btn').onclick = () => viewer.showHelp();
