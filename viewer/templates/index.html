@@ -15,19 +15,46 @@
         <a href="#" id="manual-measure-btn" class="menu-button">手动测量</a>
         <a href="#" id="roi-measure-btn" class="menu-button">框选测量</a>
         <a href="#" id="clear-btn" class="menu-button">清除标记</a>
+        <a href="#" id="Z-value" class="menu-button">计算Z值</a>
         <a href="#" id="export-btn" class="menu-button">导出报告</a>
         <a href="#" id="help-btn" class="menu-button">帮助</a>
 
     </nav>
+
+    <!-- Z值计算模态框 -->
+    <div id="z-value-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>计算冠脉Z值</h2>
+            <div class="input-group">
+                <label for="height">身高 (cm):</label>
+                <input type="number" id="height" step="0.1" placeholder="请输入身高">
+            </div>
+            <div class="input-group">
+                <label for="weight">体重 (kg):</label>
+                <input type="number" id="weight" step="0.1" placeholder="请输入体重">
+            </div>
+            <div class="input-group">
+                <label for="measured-value">实测值 (mm，可选):</label>
+                <input type="number" id="measured-value" step="0.1" placeholder="默认使用3.0mm">
+            </div>
+            <div class="button-group">
+                <button id="calculate-lca" class="vessel-button">LCA</button>
+                <button id="calculate-lad" class="vessel-button">LAD</button>
+                <button id="calculate-rca" class="vessel-button">RCA</button>
+            </div>
+            <div id="z-value-result"></div>
+        </div>
+    </div>
 
     <div class="container">
         <!-- 左侧文件列表 -->
         <div class="sidebar">
             <h3>文件</h3>
             <ul id="file-list">
-                <li class="file-item" data-file="P8SCB182">P8SCB182</li>
+                <!-- <li class="file-item" data-file="P8SCB182">P8SCB182</li>
                 <li class="file-item" data-file="P8SCB602">P8SCB602</li>
-                <li class="file-item" data-file="P8SCBE02">P8SCBE02</li>
+                <li class="file-item" data-file="P8SCBE02">P8SCBE02</li> -->
                 <!-- 更多文件... -->
             </ul>
         </div>

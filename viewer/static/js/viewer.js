@@ -1391,6 +1391,19 @@ class MedicalImageViewer {
             candidateFrames.innerHTML = '<div>未检测到血管边界</div>';
         }
     }
+
+    //-------------------------------------z值计算-------------------------------------
+    // 计算Z值功能
+    calculateZvalue() {
+        // 显示模态框
+        const modal = document.getElementById('z-value-modal');
+        modal.style.display = 'block';
+        
+        // 清空之前的结果
+        document.getElementById('z-value-result').style.display = 'none';
+        document.getElementById('height').value = '';
+        document.getElementById('weight').value = '';
+    }
 }
 
 // 初始化查看器
@@ -1401,30 +1414,36 @@ const imageDisplay = document.getElementById('image-display');
 const measurementOverlay = document.getElementById('measurement-overlay');
 
 // ROI 测量的鼠标事件处理
-imageDisplay.addEventListener('mousedown', (event) => {
-    if (viewer.measurementMode === 'roi') {
-        event.preventDefault();
-        viewer.handleMouseDown(event);
-        // 当进入 ROI 模式时，启用覆盖层的鼠标事件
-        measurementOverlay.classList.add('roi-mode');
-    }
-});
+if (imageDisplay) {
+    imageDisplay.addEventListener('mousedown', (event) => {
+        if (viewer.measurementMode === 'roi') {
+            event.preventDefault();
+            viewer.handleMouseDown(event);
+            // 当进入 ROI 模式时，启用覆盖层的鼠标事件
+            if (measurementOverlay) {
+                measurementOverlay.classList.add('roi-mode');
+            }
+        }
+    });
+}
 
-measurementOverlay.addEventListener('mousemove', (event) => {
-    if (viewer.measurementMode === 'roi') {
-        event.preventDefault();
-        viewer.handleMouseMove(event);
-    }
-});
+if (measurementOverlay) {
+    measurementOverlay.addEventListener('mousemove', (event) => {
+        if (viewer.measurementMode === 'roi') {
+            event.preventDefault();
+            viewer.handleMouseMove(event);
+        }
+    });
 
-measurementOverlay.addEventListener('mouseup', (event) => {
-    if (viewer.measurementMode === 'roi') {
-        event.preventDefault();
-        viewer.handleMouseUp(event);
-        // 当退出 ROI 模式时，禁用覆盖层的鼠标事件
-        measurementOverlay.classList.remove('roi-mode');
-    }
-});
+    measurementOverlay.addEventListener('mouseup', (event) => {
+        if (viewer.measurementMode === 'roi') {
+            event.preventDefault();
+            viewer.handleMouseUp(event);
+            // 当退出 ROI 模式时，禁用覆盖层的鼠标事件
+            measurementOverlay.classList.remove('roi-mode');
+        }
+    });
+}
 
 // 防止鼠标在图像外释放时丢失事件
 document.addEventListener('mouseup', (event) => {
@@ -1432,46 +1451,154 @@ document.addEventListener('mouseup', (event) => {
         event.preventDefault();
         viewer.handleMouseUp(event);
         // 当退出 ROI 模式时，禁用覆盖层的鼠标事件
-        measurementOverlay.classList.remove('roi-mode');
+        if (measurementOverlay) {
+            measurementOverlay.classList.remove('roi-mode');
+        }
     }
 });
 
 // 手动测量的点击事件
-imageDisplay.addEventListener('click', (event) => {
-    // 只有在手动测量模式下才处理点击事件
-    if (viewer.measurementMode === true) {
-        viewer.handleImageClick(event);
+if (imageDisplay) {
+    imageDisplay.addEventListener('click', (event) => {
+        // 只有在手动测量模式下才处理点击事件
+        if (viewer.measurementMode === true) {
+            viewer.handleImageClick(event);
+        }
+    });
+}
+
+// 等待DOM加载完成后再绑定事件
+document.addEventListener('DOMContentLoaded', function() {
+    // 文件列表点击文件名加载对应文件
+    document.querySelectorAll('.file-item').forEach(item => {
+        item.addEventListener('click', function() {
+            const fileName = this.getAttribute('data-file');
+            viewer.loadFile(fileName);
+        });
+    });
+
+    // 绑定按钮事件
+    const importBtn = document.getElementById('import-btn');
+    const infoBtn = document.getElementById('info-btn');
+    const singleMeasureBtn = document.getElementById('single-measure-btn');
+    const batchMeasureBtn = document.getElementById('batch-measure-btn');
+    const manualMeasureBtn = document.getElementById('manual-measure-btn');
+    const roiMeasureBtn = document.getElementById('roi-measure-btn');
+    const clearBtn = document.getElementById('clear-btn');
+    const zValueBtn = document.getElementById('Z-value');
+    const exportBtn = document.getElementById('export-btn');
+    const helpBtn = document.getElementById('help-btn');
+
+    if (importBtn) importBtn.onclick = () => viewer.importFile();
+    if (infoBtn) infoBtn.onclick = () => viewer.showInfo();
+    if (singleMeasureBtn) singleMeasureBtn.onclick = () => viewer.startMeasurement();
+    if (batchMeasureBtn) batchMeasureBtn.onclick = () => viewer.autoBatchMeasure();
+    if (manualMeasureBtn) manualMeasureBtn.onclick = () => viewer.startManualMeasurement();
+    if (roiMeasureBtn) roiMeasureBtn.onclick = () => viewer.drawRoiMeasurement();
+    if (clearBtn) clearBtn.onclick = () => viewer.clearMeasurements();
+    if (zValueBtn) zValueBtn.onclick = () => viewer.calculateZvalue();
+    if (exportBtn) exportBtn.onclick = () => viewer.exportReport();
+    if (helpBtn) helpBtn.onclick = () => viewer.showHelp();
+
+    // 获取模态框元素
+    const modal = document.getElementById('z-value-modal');
+    const span = document.getElementsByClassName('close')[0];
+
+    // 关闭模态框
+    if (span) {
+        span.onclick = function() {
+            if (modal) {
+                modal.style.display = 'none';
+            }
+        }
+    }
+
+    // 点击模态框外部关闭
+    window.onclick = function(event) {
+        if (modal && event.target == modal) {
+            modal.style.display = 'none';
+        }
+    }
+
+    // 计算各血管类型的Z值
+    const calculateLcaBtn = document.getElementById('calculate-lca');
+    const calculateLadBtn = document.getElementById('calculate-lad');
+    const calculateRcaBtn = document.getElementById('calculate-rca');
+
+    if (calculateLcaBtn) {
+        calculateLcaBtn.onclick = async function() {
+            await calculateSpecificZValue('LCA');
+        };
+    }
+
+    if (calculateLadBtn) {
+        calculateLadBtn.onclick = async function() {
+            await calculateSpecificZValue('LAD');
+        };
+    }
+
+    if (calculateRcaBtn) {
+        calculateRcaBtn.onclick = async function() {
+            await calculateSpecificZValue('RCA');
+        };
     }
 });
 
-// 绑定事件
-// 文件列表点击文件名加载对应文件
-document.querySelectorAll('.file-item').forEach(item => {
-    item.addEventListener('click', function() {
-        const fileName = this.getAttribute('data-file');
-        viewer.loadFile(fileName);
-    });
-});
-
-// 绑定按钮事件
-document.getElementById('import-btn').onclick = () => viewer.importFile();//导入文件
-document.getElementById('info-btn').onclick = () => viewer.showInfo();
-document.getElementById('single-measure-btn').onclick = () => viewer.startMeasurement();//单帧测量
-document.getElementById('batch-measure-btn').onclick = () => viewer.autoBatchMeasure();//批量测量
-document.getElementById('manual-measure-btn').onclick = () => viewer.startManualMeasurement();//手动测量
-document.getElementById('roi-measure-btn').onclick = () => viewer.drawRoiMeasurement();//框选测量
-document.getElementById('clear-btn').onclick = () => viewer.clearMeasurements();
-document.getElementById('export-btn').onclick = () => viewer.exportReport();
-document.getElementById('help-btn').onclick = () => viewer.showHelp();
-
-// // 控制按钮事件绑定
-// document.getElementById('prev-frame-btn').onclick = () => viewer.prevFrame();
-// document.getElementById('play-pause-btn').onclick = () => viewer.playPause();
-// document.getElementById('next-frame-btn').onclick = () => viewer.nextFrame();
-// document.getElementById('start-measure-btn').onclick = () => viewer.manualMeasure();
-
-// 缩放控制
-document.getElementById('zoom-control').addEventListener('input', function() {
-    const zoomValue = this.value;
-    document.getElementById('zoom-value').textContent = `${zoomValue}%`;
-});
+// 计算特定血管的Z值
+async function calculateSpecificZValue(vesselType) {
+    const heightInput = document.getElementById('height');
+    const weightInput = document.getElementById('weight');
+    const measuredValueInput = document.getElementById('measured-value');
+    
+    if (!heightInput || !weightInput) {
+        console.error('找不到身高或体重输入框');
+        return;
+    }
+    
+    const height = parseFloat(heightInput.value);
+    const weight = parseFloat(weightInput.value);
+    const measuredValue = measuredValueInput ? parseFloat(measuredValueInput.value) : null;
+    
+    if (!height || !weight) {
+        alert('请输入有效的身高和体重');
+        return;
+    }
+    
+    if (height <= 0 || weight <= 0) {
+        alert('身高和体重必须大于0');
+        return;
+    }
+    
+    // 如果没有输入实测值，默认使用3.0mm
+    const actualMeasuredValue = (measuredValue && measuredValue > 0) ? measuredValue : 3.0;
+    
+    try {
+        const response = await fetch('/calculate-z-value', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                height: height,
+                weight: weight,
+                measured_value: actualMeasuredValue,
+                vessel_type: vesselType
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            const resultDiv = document.getElementById('z-value-result');
+            if (resultDiv) {
+                resultDiv.textContent = `${vesselType} Z值: ${data.z_value.toFixed(2)}`;
+                resultDiv.style.display = 'block';
+            }
+        } else {
+            alert('计算失败: ' + data.error);
+        }
+    } catch (error) {
+        console.error('计算Z值时出错:', error);
+        alert('计算过程中发生错误，请查看控制台了解详情');
+    }
+}

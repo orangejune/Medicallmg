@@ -24,6 +24,8 @@ from analysis.DicomFrameImg import convert_dicom_to_jpg
 from analysis.DicomRatio import get_corrected_pixel_spacing
 import shutil
 from skimage.morphology import skeletonize
+import math
+
 """
 打分：yolo训练后的置信度/骨架评分
 """
@@ -368,7 +370,39 @@ def find_and_visualize_max_diameter_improved(binary_mask, original_image_path, s
 
     # 返回更精确的值和端点坐标（确保是Python原生类型）
     return float(max_diameter_line), [int(p1_int[0]), int(p1_int[1])], [int(p2_int[0]), int(p2_int[1])]
+
+def calculate_coronary_z_value(height, weight, LCA_measured_value=None, LAD_measured_value=None, RCA_measured_value=None):
+    """
+    计算冠脉Z值
     
+    参数:
+    height (float): 身高 (cm)
+    weight (float): 体重 (kg)
+    lca_measured_value (float): LCA实测值 (mm)
+    
+    返回:
+    float: Z值
+    """
+    LCA_z_value = None
+    LAD_z_value = None
+    RCA_z_value = None
+    # 计算BSA (Body Surface Area)
+    bsa = (0.0061 * height) + (0.0128 * weight) - 0.1529
+    
+    if LCA_measured_value:
+        LCA_expected_value = -0.368 + 4.898 * math.sqrt(bsa) - 1.761 * bsa
+        LCA_z_value = (LCA_measured_value - LCA_expected_value) / 0.324
+
+    if LAD_measured_value:
+        LAD_expected_value = -0.383 + 4.226 * math.sqrt(bsa) - 1.571 * bsa
+        LAD_z_value = (LAD_measured_value - LAD_expected_value) / 0.288
+
+    if RCA_measured_value:
+        RCA_expected_value = -0.577 + 5.032 * math.sqrt(bsa) - 2.189 * bsa
+        RCA_z_value = (RCA_measured_value - RCA_expected_value) / 0.332
+    
+    return LCA_z_value, LAD_z_value, RCA_z_value
+
 if __name__ == "__main__":
 
     # Folder paths (modify as needed)

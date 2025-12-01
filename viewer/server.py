@@ -14,7 +14,7 @@ from albumentations.pytorch import ToTensorV2
 import torch.nn.functional as F
 import segmentation_models_pytorch as smp
 import json
-
+import math
 
 # 添加当前项目路径到 Python 路径
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -525,6 +525,55 @@ def roi_measure():
         import traceback
         traceback.print_exc()
         return jsonify({'error': f'服务器内部错误: {str(e)}'}), 500
+
+@app.route('/calculate-z-value', methods=['POST'])
+def calculate_z_value():
+    try:
+        data = request.get_json()
+        height = data.get('height')
+        weight = data.get('weight')
+        measured_value = data.get('measured_value', 3.0)  # 默认值3.0mm
+        vessel_type = data.get('vessel_type')
+        
+        if not height or not weight or not vessel_type:
+            return jsonify({'error': '缺少必要参数'}), 400
+            
+        # 计算BSA (Body Surface Area)
+        bsa = (0.0061 * height) + (0.0128 * weight) - 0.1529
+        
+        # 根据不同血管类型计算Z值
+        if vessel_type == 'LCA':
+            expected_value = -0.368 + 4.898 * math.sqrt(bsa) - 1.761 * bsa
+            z_value = (measured_value - expected_value) / 0.324
+            print(f"LCA Z值: {z_value}")
+            return jsonify({
+                'success': True,
+                'z_value': z_value,
+                'vessel_type': vessel_type
+            })
+        elif vessel_type == 'LAD':
+            expected_value = -0.383 + 4.226 * math.sqrt(bsa) - 1.571 * bsa
+            z_value = (measured_value - expected_value) / 0.288
+            print(f"LAD Z值: {z_value}")
+            return jsonify({
+                'success': True,
+                'z_value': z_value,
+                'vessel_type': vessel_type
+            })
+        elif vessel_type == 'RCA':
+            expected_value = -0.577 + 5.032 * math.sqrt(bsa) - 2.189 * bsa
+            z_value = (measured_value - expected_value) / 0.332
+            print(f"RCA Z值: {z_value}")
+            return jsonify({
+                'success': True,
+                'z_value': z_value,
+                'vessel_type': vessel_type
+            })
+        else:
+            return jsonify({'error': '无效的血管类型'}), 400
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
     
 if __name__ == '__main__':
     app.run(debug=True)
