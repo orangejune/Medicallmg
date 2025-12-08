@@ -361,6 +361,12 @@ class MedicalImageViewer {
                     // 在图像上绘制边界框
                     this.drawBoundingBoxes(data.boxes);
                     
+                    // 在图像上绘制轮廓
+                    if (data.contours && data.contours.length > 0) {
+                        // 绘制第一个轮廓作为示例
+                        this.drawContourFromData(data.contours[0]);
+                    }
+                    
                     // 在备选帧区域显示边界图像
                     this.displayContourImages(data.contours);
                     
@@ -370,6 +376,7 @@ class MedicalImageViewer {
             } else {
                 alert('测量失败: ' + data.error);
             }
+            
         } catch (error) {
             console.error('测量过程中发生错误:', error);
             alert('测量过程中发生错误，请查看控制台了解详情');
@@ -491,10 +498,11 @@ class MedicalImageViewer {
             // 按帧分组
             const groupedContours = {};
             contours.forEach(contour => {
-                if (!groupedContours[contour.frame_name]) {
-                    groupedContours[contour.frame_name] = [];
+                const frameName = contour.frame_name || 'unknown.jpg';
+                if (!groupedContours[frameName]) {
+                    groupedContours[frameName] = [];
                 }
-                groupedContours[contour.frame_name].push(contour);
+                groupedContours[frameName].push(contour);
             });
             
             // 显示每帧的结果
@@ -505,11 +513,29 @@ class MedicalImageViewer {
                 frameContainer.style.borderRadius = '5px';
                 frameContainer.style.padding = '10px';
                 
-                // 添加点击事件，点击时在主区域显示对应的完整帧图像
+                // 添加点击事件，点击时在主区域显示对应的完整帧图像和测量结果
                 frameContainer.style.cursor = 'pointer';
                 frameContainer.addEventListener('click', () => {
                     this.clearMeasurements(); // 点击时先清除标记
                     this.loadFrame(frameName);
+                    
+                    // 在主图像上绘制该帧的第一个轮廓和测量线（如果有）
+                    setTimeout(() => {
+                        const frameContours = groupedContours[frameName];
+                        if (frameContours && frameContours.length > 0) {
+                            const firstContour = frameContours[0];
+                            
+                            // 绘制测量线
+                            if (firstContour.line_points && firstContour.box) {
+                                this.drawMeasurementLineFromData(firstContour);
+                            }
+                            
+                            // 绘制轮廓
+                            if (firstContour.contour_points && firstContour.contour_points.length > 0) {
+                                this.drawContourFromData(firstContour);
+                            }
+                        }
+                    }, 100);
                 });
                 
                 const frameTitle = document.createElement('div');
@@ -552,7 +578,6 @@ class MedicalImageViewer {
                     const info = document.createElement('div');
                     info.innerHTML = `
                         <div style="font-size: 11px; margin-top: 5px;">
-                            
                             <div>${diameterInfo}</div>
                         </div>
                     `;
@@ -925,7 +950,11 @@ class MedicalImageViewer {
             if (!data.error) {
                 // 等待图像加载完成后再绘制
                 this.onImageLoaded(() => {
+                    // 绘制测量线
                     this.drawMeasurementLineFromData(data);
+                    
+                    // 绘制轮廓
+                    this.drawContourFromData(data);
                 });
             }
         } catch (error) {
@@ -934,9 +963,6 @@ class MedicalImageViewer {
     }
     // 添加加载和显示测量线的方法
     drawMeasurementLineFromData(measurementData) {
-        // 再次确认清除标记
-        this.clearMeasurements();
-        
         const overlay = document.getElementById('measurement-overlay');
         const imageDisplay = document.getElementById('image-display');
         
@@ -1005,7 +1031,7 @@ class MedicalImageViewer {
             line.setAttribute('y1', y1 < y2 ? 0 : Math.abs(y2 - y1));
             line.setAttribute('x2', x1 < x2 ? Math.abs(x2 - x1) : 0);
             line.setAttribute('y2', y1 < y2 ? Math.abs(y2 - y1) : 0);
-            line.setAttribute('stroke', 'cyan');
+            line.setAttribute('stroke', 'rgb(255, 255, 0)'); 
             line.setAttribute('stroke-width', '2');
             
             svg.appendChild(line);
@@ -1013,6 +1039,132 @@ class MedicalImageViewer {
             overlay.appendChild(lineElement);
         }
     }
+
+    //在中间图像绘制半透明边界
+    drawContourFromData(contourData) {
+        const overlay = document.getElementById('measurement-overlay');
+        const imageDisplay = document.getElementById('image-display');
+        
+        if (!imageDisplay.complete || imageDisplay.naturalWidth === 0) {
+            console.warn('图像尚未加载完成，无法准确绘制轮廓');
+            return;
+        }
+        
+        // 获取图像容器的相关信息
+        const container = imageDisplay.parentElement;
+        const containerRect = container.getBoundingClientRect();
+        const imageRect = imageDisplay.getBoundingClientRect();
+        
+        // 计算图像在容器中的偏移量
+        const offsetX = imageRect.left - containerRect.left;
+        const offsetY = imageRect.top - containerRect.top;
+        
+        const naturalWidth = imageDisplay.naturalWidth;
+        const naturalHeight = imageDisplay.naturalHeight;
+        const displayedWidth = imageRect.width;
+        const displayedHeight = imageRect.height;
+        
+        // 计算缩放比例
+        const scaleX = displayedWidth / naturalWidth;
+        const scaleY = displayedHeight / naturalHeight;
+        
+        // 检查是否存在轮廓点信息
+        if (contourData.contour_points && contourData.contour_points.length > 0 && contourData.box) {
+            // 获取ROI边界框在原始图像中的位置
+            const roiX1 = contourData.box.x1;
+            const roiY1 = contourData.box.y1;
+            
+            // 验证数据有效性
+            if (isNaN(roiX1) || isNaN(roiY1) || isNaN(scaleX) || isNaN(scaleY)) {
+                console.error('坐标计算出现 NaN 值');
+                return;
+            }
+            
+            // 创建SVG元素用于绘制轮廓
+            const svgNS = "http://www.w3.org/2000/svg";
+            const svg = document.createElementNS(svgNS, "svg");
+            svg.setAttribute('width', '100%');
+            svg.setAttribute('height', '100%');
+            svg.style.position = 'absolute';
+            svg.style.top = '0';
+            svg.style.left = '0';
+            svg.style.pointerEvents = 'none';
+            svg.style.zIndex = '13'; // 略高于测量线
+            
+            // 创建多边形元素表示轮廓
+            const polygon = document.createElementNS(svgNS, "polygon");
+            
+            try {
+                // 转换轮廓点坐标
+                const validPoints = [];
+                for (let i = 0; i < contourData.contour_points.length; i++) {
+                    const point = contourData.contour_points[i];
+                    
+                    // 处理三层嵌套数组 [[[x, y]], [[x, y]], ...]
+                    let xCoord, yCoord;
+                    
+                    // 检查是否为三层嵌套数组
+                    if (Array.isArray(point) && 
+                        point.length > 0 && 
+                        Array.isArray(point[0]) && 
+                        point[0].length >= 2) {
+                        // 三层嵌套: [[x, y]]
+                        xCoord = point[0][0];
+                        yCoord = point[0][1];
+                    } else if (Array.isArray(point) && point.length >= 2) {
+                        // 两层嵌套: [x, y]
+                        xCoord = point[0];
+                        yCoord = point[1];
+                    } else {
+                        console.warn('跳过无效点:', point);
+                        continue;
+                    }
+                    
+                    // 检查坐标是否有效
+                    if (isNaN(xCoord) || isNaN(yCoord)) {
+                        console.warn('跳过无效点:', point);
+                        continue;
+                    }
+                    
+                    // 将ROI内的点坐标转换为全图坐标
+                    const globalX = roiX1 + xCoord;
+                    const globalY = roiY1 + yCoord;
+                    
+                    // 将原始坐标转换为相对于容器的坐标
+                    const displayX = globalX * scaleX + offsetX;
+                    const displayY = globalY * scaleY + offsetY;
+                    
+                    // 检查转换后的坐标是否有效
+                    if (isNaN(displayX) || isNaN(displayY)) {
+                        console.warn('坐标转换后出现 NaN 值:', {globalX, globalY, scaleX, scaleY, offsetX, offsetY});
+                        continue;
+                    }
+                    
+                    validPoints.push(`${displayX},${displayY}`);
+                }
+                
+                // 只有在有足够点的情况下才绘制
+                if (validPoints.length >= 3) {
+                    const pointsString = validPoints.join(' ');
+                    polygon.setAttribute('points', pointsString);
+                    polygon.setAttribute('fill', 'none');
+                    polygon.setAttribute('stroke', 'rgba(255, 0, 0, 0.7)');
+                    polygon.setAttribute('stroke-width', '1.5');
+                    
+                    svg.appendChild(polygon);
+                    overlay.appendChild(svg);
+                    console.log('成功绘制轮廓，使用点数:', validPoints.length);
+                } else {
+                    console.warn('有效点数不足，无法绘制轮廓。有效点数:', validPoints.length);
+                }
+            } catch (error) {
+                console.error('绘制轮廓时出错:', error);
+            }
+        } else {
+            console.log('没有有效的轮廓数据可供绘制');
+        }
+    }
+
 
     //--------------------------------------------ROI框选测量-----------------------------------------
     // 开始框选测量模式

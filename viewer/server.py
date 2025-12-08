@@ -222,7 +222,9 @@ def measure_frame():
                                         'x': int(p2_int[0]),
                                         'y': int(p2_int[1])
                                     }
-                                }
+                                },
+                                # 添加轮廓点信息
+                                'contour_points': contour.tolist() if contour is not None else []
                             }
                             
                             # 保存为JSON文件
@@ -325,6 +327,8 @@ def batch_measure():
                                 except Exception as e:
                                     print(f"计算最大直径时出错: {e}")
 
+                                contour_points_list = contour.tolist() if hasattr(contour, 'tolist') else contour.tolist()
+
                                 # 保存测量结果为JSON文件
                                 measurement_data = {
                                     'frame_name': frame_name,
@@ -348,7 +352,9 @@ def batch_measure():
                                             'x': int(p2_int[0]),
                                             'y': int(p2_int[1])
                                         }
-                                    }
+                                    },
+                                    # 添加轮廓点信息
+                                    'contour_points': contour_points_list,
                                 }
                                 
                                 # 保存为JSON文件
@@ -502,7 +508,9 @@ def roi_measure():
                         'x': int(p2_int[0]),
                         'y': int(p2_int[1])
                     }
-                }
+                },
+                # 添加轮廓点信息
+                'contour_points': contour.tolist() if contour is not None else []
             }
             
             # 保存为JSON文件
